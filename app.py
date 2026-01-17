@@ -11,9 +11,9 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (V84 Engine)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Secrets Ver)", layout="wide")
 
-# --- 스타일링 (UI 간섭 최소화) ---
+# --- 스타일링 ---
 st.markdown("""
 <style>
     .scene-box {
@@ -22,48 +22,78 @@ st.markdown("""
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border-left: 6px solid #4285F4;
+        border-left: 6px solid #FFD700; /* HF Yellow */
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- API 키 로드 ---
-def get_api_key():
-    # Secrets 및 환경변수 모두 체크
-    if "GOOGLE_API_KEY" in st.secrets: return st.secrets["GOOGLE_API_KEY"]
-    if "GEMINI_API_KEY" in st.secrets: return st.secrets["GEMINI_API_KEY"]
-    if os.getenv("GOOGLE_API_KEY"): return os.getenv("GOOGLE_API_KEY")
-    if os.getenv("GEMINI_API_KEY"): return os.getenv("GEMINI_API_KEY")
+# --- [핵심] API 키 로드 함수 (Secrets 우선) ---
+def get_api_key(key_name):
+    # 1. Streamlit Secrets에서 찾기
+    if key_name in st.secrets:
+        return st.secrets[key_name]
+    
+    # 2. 환경변수에서 찾기 (로컬 개발용)
+    if os.getenv(key_name):
+        return os.getenv(key_name)
+        
     return None
 
 # --- 사이드바 ---
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    gemini_key = get_api_key()
+    # 1. Gemini Key 로드
+    gemini_key = get_api_key("GOOGLE_API_KEY")
+    if not gemini_key:
+        gemini_key = get_api_key("GEMINI_API_KEY") # 대체 이름 체크
+
     if gemini_key:
-        st.success("✅ Gemini Key 연결됨")
+        st.success("✅ Gemini Key 자동 연결됨")
     else:
-        gemini_key = st.text_input("Gemini API Key", type="password")
+        gemini_key = st.text_input("Google Gemini API Key", type="password")
+    
+    st.markdown("---")
+
+    # 2. [수정됨] Hugging Face Token 로드
+    hf_token = get_api_key("HF_TOKEN")
+    
+    if hf_token:
+        st.success("✅ HF Token 자동 연결됨")
+    else:
+        # Secrets에 없으면 입력창 표시
+        hf_token = st.text_input("Hugging Face Token", type="password", help="Write 권한이 있는 토큰 필요")
+        st.caption("[👉 토큰 발급받기](https://huggingface.co/settings/tokens)")
     
     st.markdown("---")
     
-    # [핵심 1] 첨부파일 V84의 검증된 모델 리스트 (2.5 같은 위험 모델 제외)
-    st.subheader("🤖 분석 모델 (V84 Engine)")
-    model_options = [
-        "gemini-1.5-flash",        # [추천] 쿼터 벙커 (가장 안전)
+    # 3. 모델 설정
+    st.subheader("🤖 기획 모델 (Gemini)")
+    gemini_options = [
+        "gemini-1.5-flash", 
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-pro", 
         "gemini-1.0-pro",
         "gemini-flash-latest"
     ]
-    # 쿼터 문제 해결을 위해 1.5-flash를 기본값(index=0)으로 설정
-    gemini_model = st.selectbox("기본 모델", model_options, index=0)
+    gemini_model = st.selectbox("기본 모델", gemini_options, index=0)
     
-    st.markdown("---")
-    st.subheader("🎨 이미지 모델")
-    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
+    st.subheader("🎨 화가 모델 (Hugging Face)")
+    hf_model_id = st.selectbox(
+        "사용할 이미지 모델",
+        [
+            "black-forest-labs/FLUX.1-dev",     # 고화질 (추천)
+            "black-forest-labs/FLUX.1-schnell", # 고속
+            "stabilityai/stable-diffusion-xl-base-1.0", 
+            "runwayml/stable-diffusion-v1-5"
+        ],
+        index=0
+    )
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -71,12 +101,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("V84 Logic Implementation | Quota-Safe Mode")
+st.caption("Auto-Connect Mode (Secrets Support)")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (V84 핵심: 순수 파이썬 루프 + 즉시 전환)
+# 1. Gemini 로직 (V84 핵심 유지)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -86,47 +116,35 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심 2] UI 코드 없는 순수 로직 함수
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델
     fallback_chain = [start_model]
-    
-    # 2. 백업 리스트 (V84와 동일 구성 - 쿼터 벙커 포함)
     backups = [
-        "gemini-1.5-flash",        # 쿼터 대장 (1500 RPM)
+        "gemini-1.5-flash", 
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash-8b", 
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
     
-    # 중복 제거하며 체인 연결
     for b in backups:
         if b != start_model: 
             fallback_chain.append(b)
             
     last_error = None
     
-    # [핵심 3] 루프 내 UI 업데이트 금지 & 에러 시 즉시 continue
     for model_name in fallback_chain:
         try:
-            # 순수 API 호출만 수행
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            
-            # 성공 시 1초 대기 (안정성)
             time.sleep(1) 
             return response.text, model_name 
-            
         except Exception as e:
             last_error = e
-            # 실패 시 미련 없이 0.5초 뒤 다음 모델로
             time.sleep(0.5)
             continue
             
-    # 모든 모델 실패 시
     raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
@@ -160,31 +178,42 @@ def generate_plan_gemini(topic, api_key, model_name):
           ]
         }}
         """
-        # 함수 실행 (UI 밖에서)
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        
-        # 성공 후에만 UI 업데이트
-        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
+        st.toast(f"✅ 기획 생성 성공! (Used Model: {used_model})")
         return json.loads(clean_json_text(response_text))
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
         return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (Server-side fetch)
+# 2. Hugging Face 이미지 생성 로직
 # ------------------------------------------------------------------
 
-def fetch_image_server_side(prompt, model="flux"):
-    safe_prompt = urllib.parse.quote(prompt[:400])
-    seed = random.randint(0, 999999)
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
+def generate_image_hf(prompt, token, model_id):
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    seed = random.randint(0, 999999) 
     
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            return Image.open(BytesIO(response.content))
-    except:
-        pass
+    payload = {
+        "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed",
+        "parameters": {"seed": seed}
+    }
+
+    for attempt in range(5):
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                return Image.open(BytesIO(response.content))
+            elif "estimated_time" in response.json():
+                wait_time = response.json().get("estimated_time", 10)
+                st.toast(f"😴 모델 깨우는 중... ({wait_time:.1f}초)")
+                time.sleep(wait_time + 1)
+                continue
+            else:
+                break
+        except Exception as e:
+            time.sleep(1)
     return None
 
 # ------------------------------------------------------------------
@@ -200,7 +229,10 @@ start_btn = st.button("🚀 프로젝트 시작")
 
 if start_btn:
     if not gemini_key or not topic:
-        st.warning("API Key와 주제를 입력해주세요.")
+        st.warning("Google API Key와 주제를 입력해주세요.")
+    # 토큰 체크: Secrets에 있거나 사용자가 입력했으면 OK
+    elif not hf_token:
+        st.warning("Hugging Face Token이 필요합니다.")
     else:
         st.session_state['generated_images'] = {} 
         st.session_state['plan_data'] = None
@@ -211,7 +243,7 @@ if start_btn:
             if st.session_state['plan_data']:
                 status.update(label="기획 완료!", state="complete", expanded=False)
             else:
-                status.update(label="실패", state="error")
+                status.update(label="기획 실패", state="error")
 
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
@@ -231,7 +263,7 @@ if st.session_state['plan_data']:
         st.code(plan['visual_style']['character_prompt'], language="text")
     
     st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드")
+    st.subheader(f"🖼️ 비주얼 스토리보드 (Model: {hf_model_id.split('/')[-1]})")
 
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
@@ -251,23 +283,28 @@ if st.session_state['plan_data']:
             with col_img:
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
-                    st.success("✅ 생성 완료")
-                
                 else:
-                    msg = st.empty()
-                    msg.info("📸 촬영 중...")
-                    
-                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                    img_data = fetch_image_server_side(full_prompt, image_model)
-                    
-                    if img_data:
-                        st.session_state['generated_images'][scene_num] = img_data
-                        msg.empty()
-                        st.rerun()
+                    if hf_token:
+                        with st.spinner(f"📸 촬영 중..."):
+                             full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                             img_data = generate_image_hf(full_prompt, hf_token, hf_model_id)
+                             if img_data:
+                                 st.session_state['generated_images'][scene_num] = img_data
+                                 st.image(img_data, use_container_width=True)
+                             else:
+                                 st.error("이미지 생성 실패")
                     else:
-                        msg.error("이미지 생성 실패")
+                        st.info("토큰 필요")
 
+                if st.button(f"🔄 다시 그리기", key=f"regen_{scene_num}"):
+                     if hf_token:
+                        with st.spinner("📸 재촬영 중..."):
+                            full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                            img_data = generate_image_hf(full_prompt, hf_token, hf_model_id)
+                            if img_data:
+                                st.session_state['generated_images'][scene_num] = img_data
+                                st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
     
     if len(st.session_state['generated_images']) == len(plan['scenes']):
-        st.success("✨ 프로젝트 완성!")
+        st.success("✨ 스토리보드 완성!")

@@ -74,37 +74,37 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [DeBrief 스타일 수정] 검증된 안정적 모델 리스트 사용
+# [핵심 수정] DeBrief 앱의 폴백 로직 + 최신 모델 리스트 적용
 def generate_with_fallback(prompt, api_key):
     genai.configure(api_key=api_key)
     
-    # DeBrief 앱에서 사용된 '실패 확률이 낮은' 모델 우선 순위
+    # 2025-2026년 기준 가장 안정적인 모델 리스트 (구버전 1.0 제거)
     models_to_try = [
-        "gemini-2.0-flash",        # [1순위] 최신, 빠름, 오류 적음 (DeBrief 추천)
-        "gemini-1.5-flash",        # [2순위] 가장 안정적임
-        "gemini-1.5-flash-8b",     # [3순위] 경량화 모델
-        "gemini-1.5-pro",          # [4순위] 고성능 (가끔 404 뜸)
-        "gemini-1.0-pro"           # [5순위] 구버전 (최후의 보루)
+        "gemini-1.5-flash",        # [1순위] 속도 빠름, 무료 티어에서 가장 안정적
+        "gemini-1.5-pro",          # [2순위] 고성능, Flash 실패 시 시도
+        "gemini-1.5-flash-8b",     # [3순위] 초경량 모델
+        "gemini-1.5-flash-latest", # [4순위] 최신 별칭
     ]
     
     last_error = None
     
     for model_name in models_to_try:
         try:
-            # 모델 생성 및 호출
+            # 모델 초기화 및 생성 시도
             model = genai.GenerativeModel(model_name)
-            # DeBrief와 동일하게 타임아웃 넉넉히 설정하지 않고 빠른 실패 유도 후 전환
             response = model.generate_content(prompt)
-            time.sleep(1) # API 과부하 방지 쿨타임
+            time.sleep(1) # API 과부하 방지 (DeBrief 스타일)
             return response.text
+            
         except Exception as e:
             last_error = e
-            # 에러 발생 시(404 등) DeBrief처럼 바로 다음 모델 시도
+            # 에러 발생 시(404 등) 멈추지 않고 즉시 다음 모델 시도
+            # st.toast(f"⚠️ {model_name} 실패, 다음 모델 시도...") # 디버깅용 (필요시 주석 해제)
             time.sleep(0.5)
             continue
             
-    # 모든 모델 실패 시 상세 에러 출력
-    raise Exception(f"모든 모델 시도 실패. \n마지막 에러: {last_error}\n(API Key 권한이나 할당량을 확인해주세요)")
+    # 모든 모델이 실패했을 때만 에러 발생
+    raise Exception(f"모든 모델 시도 실패. (API Key를 확인해주세요)\n마지막 에러: {last_error}")
 
 def generate_plan_gemini(topic, api_key):
     """Gemini로 기획안 생성 (Fallback 적용)"""

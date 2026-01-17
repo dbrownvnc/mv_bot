@@ -5,64 +5,88 @@ import json
 import re
 import urllib.parse
 import time
-import random  # [필수] 랜덤 시드 생성을 위해 추가
+import random
+import requests
+from io import BytesIO
+from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Free)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Free Tier Optimized)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
 <style>
     .scene-box {
-        background-color: #f0f2f6;
-        border-radius: 10px;
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border-left: 5px solid #4285F4;
+        border-left: 6px solid #34A853; /* Google Green */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .prompt-box {
-        background-color: #e9ecef;
+    .process-log {
+        font-family: monospace;
+        font-size: 0.9em;
+        color: #0066cc;
+        background-color: #f0f7ff;
         padding: 10px;
         border-radius: 5px;
-        font-family: monospace;
-        font-size: 0.85em;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- API 키 로드 함수 ---
-def get_api_key():
-    if "GOOGLE_API_KEY" in st.secrets:
-        return st.secrets["GOOGLE_API_KEY"]
-    elif os.getenv("GOOGLE_API_KEY"):
-        return os.getenv("GOOGLE_API_KEY")
+# --- API 키 로드 ---
+def get_api_key(key_name):
+    if key_name in st.secrets:
+        return st.secrets[key_name]
+    elif os.getenv(key_name):
+        return os.getenv(key_name)
     return None
 
-# --- 사이드바 설정 ---
+# --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정 (Free Edition)")
+    st.header("⚙️ 설정")
     
-    loaded_key = get_api_key()
-    
-    if loaded_key:
-        st.success("✅ API Key가 연결되었습니다.")
-        api_key = loaded_key
+    gemini_key = get_api_key("GOOGLE_API_KEY")
+    if gemini_key:
+        st.success("✅ Gemini Key 연결됨")
     else:
-        st.warning("API Key가 없습니다.")
-        api_key = st.text_input("Google Gemini API Key", type="password")
-        st.caption("Google AI Studio에서 무료로 발급받으세요.")
+        gemini_key = st.text_input("Google Gemini API Key", type="password")
     
     st.markdown("---")
-    st.info("이미지 생성: Pollinations.ai (Flux Model)")
+    
+    # [전략 수정] 무료 사용자에게 가장 유리한 모델을 기본값으로 설정
+    st.subheader("🤖 분석 모델")
+    st.caption("무료 계정 최적화 순서입니다.")
+    
+    model_options = [
+        "gemini-1.5-flash",        # [1순위] 하루 1500회 무료 (절대 안 막힘)
+        "gemini-2.0-flash-lite-preview-02-05", # [2순위] 성능 좋음 (하루 50회 제한)
+        "gemini-1.5-flash-8b",     # [3순위] 초경량
+        "gemini-1.5-pro",          # [4순위] 고성능 (제한 심함)
+        "gemini-1.0-pro"           # [5순위] 구버전
+    ]
+    gemini_model = st.selectbox("우선 사용 모델", model_options, index=0)
+    
+    st.markdown("---")
+    st.subheader("🎨 이미지 모델")
+    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
+
+    if st.button("🗑️ 초기화"):
+        st.session_state.clear()
+        st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (Gemini Edition)")
-st.subheader("비용 걱정 없는 무제한 뮤직비디오 기획 툴")
+st.title("🎬 AI MV Director")
+st.caption("무료 계정 최적화 엔진 | 실시간 생성 프로세스")
 
-topic = st.text_area("영상 주제 입력", height=80, 
-                     placeholder="예: 사이버펑크 서울, 비 오는 네온 거리, 고독한 안드로이드, 몽환적인 분위기")
+topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# --- 헬퍼 함수 ---
+# ------------------------------------------------------------------
+# 1. Gemini 로직 (DeBrief 로직 + 무료 계정 최적화)
+# ------------------------------------------------------------------
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -71,141 +95,186 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [유지] 잘 작동하는 Gemini Fallback 로직
-def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
+def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
-    fallback_chain = [start_model]
-    backups = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
     
-    for b in backups:
-        if b != start_model: fallback_chain.append(b)
+    # [전략] 사용자가 선택한 모델을 1순위로 하되,
+    # 나머지는 '실패 확률이 낮은 순서'로 배치하여 생존율을 높임
+    backup_models = [
+        "gemini-1.5-flash",        # 구원투수 1위
+        "gemini-1.5-flash-8b",     # 구원투수 2위
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
+    ]
+    
+    fallback_chain = [start_model]
+    for b in backup_models:
+        if b != start_model:
+            fallback_chain.append(b)
     
     last_error = None
+    log_placeholder = st.empty()
+    
     for model_name in fallback_chain:
         try:
+            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델 연결 시도...</div>", unsafe_allow_html=True)
+            
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1)
+            
+            time.sleep(1) 
+            log_placeholder.empty() # 성공 시 로그 삭제
             return response.text, model_name 
+            
         except Exception as e:
             last_error = e
-            time.sleep(0.5)
+            # 429(Quota) 에러면 콘솔에만 출력하고 빠르게 다음으로
+            # 404(Model not found)도 마찬가지
+            time.sleep(0.5) 
             continue
-    raise Exception(f"All models failed. Last Error: {last_error}")
-
-def generate_plan_gemini(topic, api_key):
-    try:
-        prompt = f"""
-        You are a professional Music Video Director.
-        Analyze the following theme: "{topic}"
-        
-        Create a detailed plan in JSON format ONLY. Do not write any other text.
-        
-        JSON Structure:
-        {{
-          "project_title": "Creative Title (Korean)",
-          "logline": "One sentence concept (Korean)",
-          "music": {{
-            "style": "Genre and Mood (Korean)",
-            "suno_prompt": "English prompt for music AI. Include structural tags like [Intro], [Drop]."
-          }},
-          "visual_style": {{
-            "description": "Visual tone (Korean)",
-            "character_prompt": "English description of the main character."
-          }},
-          "scenes": [
-            {{
-              "scene_num": 1,
-              "timecode": "00:00-00:05",
-              "action": "Scene description (Korean)",
-              "camera": "Shot type (Korean)",
-              "image_prompt": "Highly detailed English prompt for image generation. Keywords: cinematic, 8k, photorealistic."
-            }}
-            // Create 4 scenes total
-          ]
-        }}
-        """
-        response_text, used_model = generate_with_fallback(prompt, api_key, "gemini-1.5-flash")
-        json_str = clean_json_text(response_text)
-        return json.loads(json_str)
-    except Exception as e:
-        st.error(f"기획안 생성 실패: {e}")
-        return None
-
-# [수정됨] 이미지 URL 생성 함수 (안정성 강화)
-def get_pollinations_url(prompt):
-    """
-    Pollinations.ai URL 생성
-    - 프롬프트 길이 제한 (URL 에러 방지)
-    - 랜덤 시드 추가 (캐싱/중복 요청 방지)
-    """
-    # 1. 프롬프트가 너무 길면 잘라냄 (URL 길이 제한 방지)
-    safe_prompt = prompt[:450] 
-    encoded_prompt = urllib.parse.quote(safe_prompt)
-    
-    # 2. 랜덤 시드 생성 (매번 다른 요청으로 인식하게 함)
-    seed = random.randint(0, 999999)
-    
-    # model=flux (고화질), seed 추가, nologo 추가
-    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&model=flux&nologo=true&seed={seed}&enhance=false"
-
-# --- 실행 로직 ---
-
-if st.button("🚀 무료 생성 시작"):
-    if not api_key:
-        st.warning("Google API Key가 필요합니다.")
-    elif not topic:
-        st.warning("주제를 입력해주세요.")
-    else:
-        with st.status("🎬 작업 진행 중...", expanded=True) as status:
-            st.write("🧠 Gemini가 기획안을 작성 중입니다...")
-            plan_data = generate_plan_gemini(topic, api_key)
             
-            if plan_data:
-                st.write("✅ 기획안 완료! 이미지를 생성합니다...")
-                status.update(label="작업 완료!", state="complete", expanded=False)
-                
-                st.divider()
-                st.header(f"🎥 {plan_data['project_title']}")
-                st.caption(plan_data['logline'])
-                
-                tab1, tab2 = st.tabs(["📊 기획 상세", "🖼️ 스토리보드"])
-                
-                with tab1:
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.subheader("🎵 음악")
-                        st.write(f"**스타일:** {plan_data['music']['style']}")
-                        st.code(plan_data['music']['suno_prompt'], language="text")
-                    with c2:
-                        st.subheader("🎨 비주얼")
-                        st.write(f"**컨셉:** {plan_data['visual_style']['description']}")
-                        st.code(plan_data['visual_style']['character_prompt'], language="text")
+    raise Exception(f"모든 모델 연결 실패. (API Key 상태를 확인해주세요) Last Error: {last_error}")
 
-                with tab2:
-                    # [수정됨] 이미지 생성 루프
-                    for scene in plan_data['scenes']:
-                        with st.container():
-                            st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
-                            col1, col2 = st.columns([1, 1.5])
-                            with col1:
-                                st.subheader(f"Scene {scene['scene_num']}")
-                                st.caption(f"⏱ {scene['timecode']}")
-                                st.write(f"**내용:** {scene['action']}")
-                                st.write(f"**촬영:** {scene['camera']}")
-                                with st.expander("프롬프트"):
-                                    st.code(scene['image_prompt'], language="text")
-                            with col2:
-                                # 캐릭터 프롬프트 + 씬 프롬프트 결합
-                                full_prompt = f"{plan_data['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                                
-                                # 이미지 URL 생성
-                                img_url = get_pollinations_url(full_prompt)
-                                
-                                # 이미지 표시
-                                st.image(img_url, use_container_width=True)
-                                
-                                # [핵심] 서버 과부하 방지를 위한 딜레이 (다음 이미지 생성 전 1.5초 대기)
-                                time.sleep(1.5)
-                                
-                            st.markdown("</div>", unsafe_allow_html=True)
+# ------------------------------------------------------------------
+# 2. 이미지 생성 로직 (서버 사이드 다운로드)
+# ------------------------------------------------------------------
+
+def fetch_image_server_side(prompt, model="flux"):
+    safe_prompt = urllib.parse.quote(prompt[:400])
+    seed = random.randint(0, 999999)
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
+    
+    try:
+        response = requests.get(url, timeout=20)
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content))
+    except Exception as e:
+        print(f"Image Error: {e}")
+    return None
+
+# ------------------------------------------------------------------
+# 3. 실행 로직 (실시간 시각화)
+# ------------------------------------------------------------------
+
+if 'plan_data' not in st.session_state:
+    st.session_state['plan_data'] = None
+if 'generated_images' not in st.session_state:
+    st.session_state['generated_images'] = {} 
+
+start_btn = st.button("🚀 프로젝트 시작")
+
+if start_btn:
+    if not gemini_key or not topic:
+        st.warning("API Key와 주제를 입력해주세요.")
+    else:
+        # [단계 1] 기획안 생성
+        st.session_state['generated_images'] = {} 
+        st.session_state['plan_data'] = None
+        
+        with st.status("📝 기획안 작성 중...", expanded=True) as status:
+            prompt = f"""
+            You are a professional Music Video Director.
+            Analyze the following theme: "{topic}"
+            Create a detailed plan in JSON format ONLY.
+            
+            JSON Structure:
+            {{
+              "project_title": "Creative Title (Korean)",
+              "logline": "One sentence concept (Korean)",
+              "music": {{
+                "style": "Genre and Mood (Korean)",
+                "suno_prompt": "English prompt for music AI."
+              }},
+              "visual_style": {{
+                "description": "Visual tone (Korean)",
+                "character_prompt": "English description of the main character."
+              }},
+              "scenes": [
+                {{
+                  "scene_num": 1,
+                  "timecode": "00:00-00:05",
+                  "action": "Scene description (Korean)",
+                  "camera": "Shot type (Korean)",
+                  "image_prompt": "Highly detailed English prompt for image generation."
+                }}
+                // Create 4 scenes total
+              ]
+            }}
+            """
+            
+            try:
+                raw_text, used_model = generate_with_fallback(prompt, gemini_key, gemini_model)
+                st.session_state['plan_data'] = json.loads(clean_json_text(raw_text))
+                status.update(label=f"기획 완료! (모델: {used_model})", state="complete", expanded=False)
+                
+            except Exception as e:
+                st.error(f"기획안 생성 실패: {e}")
+
+# [단계 2] 기획 내용 표시
+if st.session_state['plan_data']:
+    plan = st.session_state['plan_data']
+    
+    st.divider()
+    st.markdown(f"## 🎥 {plan['project_title']}")
+    st.info(f"**로그라인:** {plan['logline']}")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 🎵 Music")
+        st.write(plan['music']['style'])
+        st.code(plan['music']['suno_prompt'], language="text")
+    with c2:
+        st.markdown("### 🎨 Visuals")
+        st.write(plan['visual_style']['description'])
+        st.code(plan['visual_style']['character_prompt'], language="text")
+    
+    st.markdown("---")
+    st.subheader("🖼️ 비주얼 스토리보드 제작")
+
+    # [단계 3] 씬별 순차 생성 (Real-time View)
+    for scene in plan['scenes']:
+        scene_num = scene['scene_num']
+        
+        with st.container():
+            st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
+            st.markdown(f"#### 🎬 Scene {scene_num} <span style='font-size:0.8em; color:gray'>({scene['timecode']})</span>", unsafe_allow_html=True)
+            
+            col_text, col_img = st.columns([1, 1.5])
+            
+            with col_text:
+                st.write(f"**내용:** {scene['action']}")
+                st.write(f"**촬영:** {scene['camera']}")
+                with st.expander("프롬프트 상세"):
+                    st.code(scene['image_prompt'], language="text")
+            
+            with col_img:
+                if scene_num in st.session_state['generated_images']:
+                    st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+                    st.success("✅ 생성 완료")
+                
+                else:
+                    # 실시간 생성 과정 보여주기
+                    status_placeholder = st.empty()
+                    img_placeholder = st.empty()
+                    
+                    status_placeholder.info(f"📸 Scene {scene_num} 촬영 중... (AI가 그리는 중)")
+                    
+                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                    
+                    # 서버 사이드 다운로드
+                    img_data = fetch_image_server_side(full_prompt, image_model)
+                    
+                    if img_data:
+                        st.session_state['generated_images'][scene_num] = img_data
+                        status_placeholder.empty()
+                        img_placeholder.image(img_data, use_container_width=True)
+                        time.sleep(0.5) 
+                        st.rerun() # 다음 씬 생성을 위해 리런
+                    else:
+                        status_placeholder.error("이미지 생성 실패")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    if len(st.session_state['generated_images']) == len(plan['scenes']):
+        st.success("✨ 모든 촬영이 종료되었습니다!")

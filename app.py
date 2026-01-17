@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Speed Ver)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Pure Engine)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -24,16 +24,6 @@ st.markdown("""
         margin-bottom: 20px;
         border-left: 6px solid #4285F4;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .process-log {
-        font-family: monospace;
-        font-size: 0.85em;
-        color: #555;
-        background-color: #f8f9fa;
-        padding: 8px;
-        border-radius: 4px;
-        margin-top: 5px;
-        border-left: 3px solid #ccc;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -58,7 +48,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [첨부파일과 동일] 기본 모델 선택
+    # [설정] 첨부파일 Line 606 모델 리스트 (순서 중요)
     st.subheader("🤖 분석 모델")
     model_options = [
         "gemini-1.5-pro", 
@@ -68,11 +58,12 @@ with st.sidebar:
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
-    # 속도를 위해 1.5-flash를 기본으로 추천하지만, 선택은 자유입니다.
-    gemini_model = st.selectbox("기본 모델", model_options, index=2) 
+    # 첨부파일 기본값 index=0 (1.5-pro)
+    gemini_model = st.selectbox("기본 분석 모델", model_options, index=0)
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
+    # Pollinations Rate Limit 대응을 위해 모델 선택 기능 유지
     image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
 
     if st.button("🗑️ 초기화"):
@@ -81,12 +72,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief Engine (Fast-Fail Mode) | 고속 생성")
+st.caption("DeBrief Engine Replica (No UI Overhead)")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (첨부파일의 'Fast Fail' 로직 완벽 복원)
+# 1. Gemini 로직 (app_final_v84.py Line 354 복제)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -96,50 +87,35 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
+# [수정 완료] 첨부파일 원본 함수 그대로 사용 (UI 로그 제거)
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델 설정
+    # Line 356
     fallback_chain = [start_model]
     
-    # 2. 백업 모델 리스트 (첨부파일 app_final_v84.py와 동일)
-    backups = [
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
-    ]
+    # Line 357 (백업 리스트)
+    backups = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
     
-    # 체인 구성
+    # Line 358-359
     for b in backups:
-        if b != start_model: 
-            fallback_chain.append(b)
-            
+        if b != start_model: fallback_chain.append(b)
+        
     last_error = None
-    log_placeholder = st.empty()
     
-    # [핵심 수정] 무한 루프 제거 -> 한 번씩만 빠르게 시도하고 넘어가기 (속도 최적화)
+    # Line 361-367 (핵심 로직: UI 업데이트 없이 순수 실행)
     for model_name in fallback_chain:
         try:
-            # 로그 표시 (사용자가 진행상황 인지)
-            log_placeholder.markdown(f"<div class='process-log'>⚡ <b>{model_name}</b> 연결 중...</div>", unsafe_allow_html=True)
-            
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            
-            # 성공 시 즉시 반환 (불필요한 대기 제거)
-            log_placeholder.empty()
+            time.sleep(1) # 성공 시 1초 대기
             return response.text, model_name 
-            
         except Exception as e:
             last_error = e
-            # [속도 핵심] 실패 시 대기 시간을 0.5초로 최소화
-            # 안 되는 모델 붙잡고 있지 않고 바로 다음 타자로 넘김
-            time.sleep(0.5)
+            time.sleep(0.5) # 실패 시 0.5초 대기
             continue
             
-    # 모든 모델이 실패했을 때만 에러 발생
+    # Line 368
     raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
@@ -173,15 +149,19 @@ def generate_plan_gemini(topic, api_key, model_name):
           ]
         }}
         """
+        # 폴백 함수 호출
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        st.toast(f"✅ 기획 생성 완료! (Used: {used_model})")
+        
+        # 성공 시에만 Toast 띄우기 (함수 밖에서 처리하거나 여기서 간단히)
+        st.toast(f"✅ 기획 완료 (Used: {used_model})")
+        
         return json.loads(clean_json_text(response_text))
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
         return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (서버 사이드 다운로드 - 안정성 유지)
+# 2. 이미지 생성 로직 (Server-side fetch 유지)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -190,15 +170,15 @@ def fetch_image_server_side(prompt, model="flux"):
     url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
     
     try:
-        response = requests.get(url, timeout=15) # 타임아웃 적절히 설정
+        response = requests.get(url, timeout=20)
         if response.status_code == 200:
             return Image.open(BytesIO(response.content))
     except Exception as e:
-        print(f"Image Error: {e}")
+        pass
     return None
 
 # ------------------------------------------------------------------
-# 3. 실행 로직 (실시간 시각화 유지)
+# 3. 실행 로직
 # ------------------------------------------------------------------
 
 if 'plan_data' not in st.session_state:
@@ -216,15 +196,13 @@ if start_btn:
         st.session_state['plan_data'] = None
         
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
-            # 기획안 생성 호출
             st.session_state['plan_data'] = generate_plan_gemini(topic, gemini_key, gemini_model)
-            
             if st.session_state['plan_data']:
-                status.update(label="기획 완료! 비주얼 생성을 시작합니다.", state="complete", expanded=False)
+                status.update(label="기획 완료!", state="complete", expanded=False)
             else:
-                status.update(label="기획 실패", state="error")
+                status.update(label="실패", state="error")
 
-# 결과 표시 및 순차적 이미지 생성
+# 결과 표시 및 이미지 순차 생성
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -243,9 +221,8 @@ if st.session_state['plan_data']:
         st.code(plan['visual_style']['character_prompt'], language="text")
     
     st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드 제작")
+    st.subheader("🖼️ 비주얼 스토리보드")
 
-    # 씬 루프
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         
@@ -267,27 +244,21 @@ if st.session_state['plan_data']:
                     st.success("✅ 생성 완료")
                 
                 else:
-                    # 실시간 생성 과정 보여주기
-                    status_placeholder = st.empty()
-                    img_placeholder = st.empty()
-                    
-                    status_placeholder.info(f"📸 Scene {scene_num} 촬영 중...")
+                    # 이미지 생성 시각화 (간단한 메시지만)
+                    status_ph = st.empty()
+                    status_ph.info("📸 촬영 중...")
                     
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                    
-                    # 이미지 생성 요청
                     img_data = fetch_image_server_side(full_prompt, image_model)
                     
                     if img_data:
                         st.session_state['generated_images'][scene_num] = img_data
-                        status_placeholder.empty()
-                        img_placeholder.image(img_data, use_container_width=True)
-                        time.sleep(0.1) # 아주 짧은 대기 후 바로 리런 (속도감 향상)
-                        st.rerun()
+                        status_ph.empty()
+                        st.rerun() # 즉시 갱신
                     else:
-                        status_placeholder.error("이미지 생성 실패")
+                        status_ph.error("이미지 생성 실패 (서버 혼잡)")
 
             st.markdown("</div>", unsafe_allow_html=True)
-
+    
     if len(st.session_state['generated_images']) == len(plan['scenes']):
-        st.success("✨ 모든 촬영이 종료되었습니다!")
+        st.success("✨ 프로젝트 완성!")

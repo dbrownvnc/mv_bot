@@ -4,7 +4,7 @@ import os
 import json
 import re
 import urllib.parse
-import time  # [추가] 재시도 로직을 위해 필요
+import time
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="AI MV Director (Free)", layout="wide")
@@ -74,37 +74,35 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [수정] 404 에러 방지를 위한 모델 자동 변경 함수 추가
+# [핵심 수정] 모델 리스트를 최신 버전으로 갱신하여 404 오류 해결
 def generate_with_fallback(prompt, api_key):
     genai.configure(api_key=api_key)
     
-    # 시도할 모델 순서 (최신 -> 구버전 순)
-    # 1.5-pro가 404 에러가 날 경우 2.0-flash나 1.5-flash로 자동 전환됩니다.
+    # 구버전(1.0-pro) 제거 및 최신 안정화 모델로 교체
     models_to_try = [
-        "gemini-2.0-flash",        # 최신/고속
-        "gemini-1.5-pro-latest",   # Pro 최신
-        "gemini-1.5-pro",          # Pro 일반
-        "gemini-1.5-flash",        # Flash 일반
-        "gemini-1.5-flash-8b",     # Flash 경량
-        "gemini-1.0-pro"           # 구버전
+        "gemini-1.5-flash",        # [추천] 가장 빠르고 무료 쿼터가 많음
+        "gemini-1.5-pro",          # [고성능] 지능이 높음
+        "gemini-1.5-flash-latest", # Flash 최신 별칭
+        "gemini-1.5-pro-latest"    # Pro 최신 별칭
     ]
     
     last_error = None
     
     for model_name in models_to_try:
         try:
+            # 모델 생성 시도
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1) # 과부하 방지
+            time.sleep(1) # API 과부하 방지
             return response.text
         except Exception as e:
             last_error = e
-            # 에러 발생 시(404 등) 다음 모델로 넘어감
+            # 에러 발생 시 로그를 남기지 않고 조용히 다음 모델 시도
             time.sleep(0.5)
             continue
             
     # 모든 모델 실패 시 에러 발생
-    raise Exception(f"모든 모델 시도 실패. 마지막 에러: {last_error}")
+    raise Exception(f"사용 가능한 모든 Gemini 모델 시도 실패.\n마지막 에러: {last_error}\nAPI Key가 올바른지 확인해주세요.")
 
 def generate_plan_gemini(topic, api_key):
     """Gemini로 기획안 생성 (Fallback 적용)"""
@@ -140,13 +138,13 @@ def generate_plan_gemini(topic, api_key):
         }}
         """
         
-        # [수정] 단일 호출 대신 Fallback 함수 사용
+        # Fallback 함수 호출
         response_text = generate_with_fallback(prompt, api_key)
         
         json_str = clean_json_text(response_text)
         return json.loads(json_str)
     except Exception as e:
-        st.error(f"오류 발생: {e}")
+        st.error(f"기획안 생성 중 오류 발생: {e}")
         return None
 
 def get_pollinations_url(prompt):

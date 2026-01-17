@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (v84 Logic)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Diagnostic)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -24,6 +24,15 @@ st.markdown("""
         margin-bottom: 20px;
         border-left: 6px solid #4285F4;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .diagnostic-box {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 0.85em;
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -48,7 +57,45 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [설정] 첨부파일과 동일한 모델 리스트 구성
+    # [NEW] API 키 진단 도구
+    st.subheader("🛠️ 문제 해결 도구")
+    if st.button("🔑 API 키 진단 및 테스트"):
+        if not gemini_key:
+            st.error("API Key를 먼저 입력하세요.")
+        else:
+            try:
+                genai.configure(api_key=gemini_key)
+                # 1. 모델 리스트 조회
+                st.write("📡 Google 서버 접속 중...")
+                models = list(genai.list_models())
+                
+                # 'generateContent' 기능을 지원하는 모델만 필터링
+                available_models = []
+                for m in models:
+                    if 'generateContent' in m.supported_generation_methods:
+                        available_models.append(m.name)
+                
+                if available_models:
+                    st.success("✅ API Key 유효함 (접속 성공)")
+                    st.markdown("⬇️ **내 키로 사용 가능한 모델 목록:**")
+                    st.code("\n".join(available_models))
+                    
+                    # 2. 간단한 테스트 생성
+                    test_model = available_models[0]
+                    st.write(f"🧪 '{test_model}' 모델로 테스트 생성 시도...")
+                    m = genai.GenerativeModel(test_model)
+                    res = m.generate_content("Hello, AI.")
+                    st.info(f"응답 성공: {res.text}")
+                else:
+                    st.warning("⚠️ 접속은 됐는데, 텍스트 생성 가능한 모델이 없습니다. (권한 문제)")
+                    
+            except Exception as e:
+                st.error(f"❌ API Key 문제 발생:\n{e}")
+                st.caption("Tip: 키가 만료되었거나, 'Generative Language API'가 활성화되지 않았을 수 있습니다.")
+
+    st.markdown("---")
+    
+    # 모델 선택 (진단 결과에 따라 유연하게 선택 가능)
     st.subheader("🤖 분석 모델")
     model_options = [
         "gemini-1.5-pro", 
@@ -58,7 +105,7 @@ with st.sidebar:
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
-    gemini_model = st.selectbox("기본 분석 모델", model_options, index=0)
+    gemini_model = st.selectbox("기본 분석 모델", model_options, index=2) # 1.5-flash 기본
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
@@ -70,12 +117,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("v84 Engine Replica (Fast Fail & No UI Overhead)")
+st.caption("System Diagnostic Mode | Smart Fallback")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (app_final_v84.py의 generate_with_fallback 완벽 복제)
+# 1. Gemini 로직 (스마트 폴백 - 진단 결과 반영 가능)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -85,48 +132,53 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [중요] UI 코드를 싹 빼고, 첨부파일의 순수 로직만 남김
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델 설정
+    # 1. 우선순위 리스트 구성
     fallback_chain = [start_model]
-    
-    # 2. 백업 모델 리스트 (첨부파일과 동일)
     backups = [
+        "gemini-1.5-flash",        # 가장 안전
         "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
     
-    # 3. 체인 구성
     for b in backups:
-        if b != start_model: 
-            fallback_chain.append(b)
+        if b != start_model: fallback_chain.append(b)
             
     last_error = None
     
-    # 4. 순차 실행 (UI 업데이트 없이 조용하고 빠르게)
+    # 2. 순차 실행 (UI 간섭 없이 빠름)
     for model_name in fallback_chain:
         try:
-            # st.write(...) 같은 거 절대 넣지 않음 -> 속도 저하 원인
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            
-            # 성공 시 1초 대기 (첨부파일 로직)
             time.sleep(1) 
             return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 실패 시 0.5초 대기 후 바로 다음 모델로 (재시도 X)
+            # 404(모델 없음)나 400(Bad Request)는 즉시 다음으로
+            # 429(Quota)는 어쩔 수 없이 넘김 (대기해도 무료 티어는 바로 안 풀림)
             time.sleep(0.5)
             continue
-            
-    # 다 돌았는데도 안 되면 그때 에러 발생
-    raise Exception(f"All models failed. Last Error: {last_error}")
+    
+    # [최후의 수단] 하드코딩 모델이 다 실패하면, '사용 가능한 모델'을 동적으로 찾아서 시도
+    try:
+        print("하드코딩 모델 실패. 동적 모델 탐색 시도...")
+        all_models = genai.list_models()
+        for m in all_models:
+            if 'generateContent' in m.supported_generation_methods:
+                # 찾은 모델로 마지막 시도
+                model = genai.GenerativeModel(m.name)
+                response = model.generate_content(prompt)
+                return response.text, m.name
+    except:
+        pass
+
+    raise Exception(f"모든 모델 실패. (API Key 권한을 확인하세요). Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
     try:
@@ -159,10 +211,8 @@ def generate_plan_gemini(topic, api_key, model_name):
           ]
         }}
         """
-        # 폴백 함수 호출
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        
-        st.toast(f"✅ 기획 완료 (Used: {used_model})")
+        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
         return json.loads(clean_json_text(response_text))
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
@@ -181,8 +231,8 @@ def fetch_image_server_side(prompt, model="flux"):
         response = requests.get(url, timeout=20)
         if response.status_code == 200:
             return Image.open(BytesIO(response.content))
-    except Exception as e:
-        pass # 조용히 넘어감
+    except:
+        pass
     return None
 
 # ------------------------------------------------------------------
@@ -211,7 +261,6 @@ if start_btn:
             else:
                 status.update(label="실패", state="error")
 
-# 결과 표시 및 이미지 생성
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -253,7 +302,6 @@ if st.session_state['plan_data']:
                     st.success("✅ 생성 완료")
                 
                 else:
-                    # 간단한 상태 메시지만 표시
                     msg = st.empty()
                     msg.info("📸 촬영 중...")
                     
@@ -263,7 +311,7 @@ if st.session_state['plan_data']:
                     if img_data:
                         st.session_state['generated_images'][scene_num] = img_data
                         msg.empty()
-                        st.rerun() # 이미지 나오면 즉시 갱신
+                        st.rerun()
                     else:
                         msg.error("이미지 생성 실패")
 

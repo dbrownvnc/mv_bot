@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Hybrid)", layout="wide")
+st.set_page_config(page_title="AI MV Director (HF + Manual)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -22,15 +22,19 @@ st.markdown("""
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border-left: 6px solid #4285F4;
+        border-left: 6px solid #FFD700; /* HF Yellow */
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     .manual-box {
         background-color: #f8f9fa;
-        border: 2px dashed #4285F4;
+        border: 2px dashed #FFD700;
         padding: 20px;
         border-radius: 10px;
         margin-bottom: 20px;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -45,7 +49,7 @@ def get_api_key(key_name):
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    # [NEW] 실행 모드 선택
+    # [설정] 실행 모드 선택
     st.subheader("🚀 실행 모드")
     execution_mode = st.radio(
         "방식을 선택하세요",
@@ -81,15 +85,24 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # HF 토큰은 이미지 생성용이라 항상 필요 (Secrets 우선)
+    # [수정됨] HF 토큰은 이미지 생성용이라 항상 필요 (Secrets 우선)
     hf_token = get_api_key("HF_TOKEN")
     if hf_token:
         st.success("✅ HF Token 연결됨")
     else:
-        hf_token = st.text_input("Hugging Face Token", type="password")
+        hf_token = st.text_input("Hugging Face Token", type="password", help="Write 권한이 있는 토큰 필요")
     
     st.subheader("🎨 이미지 모델")
-    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
+    hf_model_id = st.selectbox(
+        "사용할 이미지 모델",
+        [
+            "black-forest-labs/FLUX.1-dev",     # 고화질 (추천)
+            "black-forest-labs/FLUX.1-schnell", # 고속
+            "stabilityai/stable-diffusion-xl-base-1.0", 
+            "runwayml/stable-diffusion-v1-5"
+        ],
+        index=0
+    )
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -98,9 +111,9 @@ with st.sidebar:
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
 if execution_mode == "API 자동 실행 (편리함)":
-    st.caption("Auto Mode | API Connection")
+    st.caption("Auto Mode | Gemini API + Hugging Face")
 else:
-    st.caption("Manual Mode | No Quota Limit | Copy & Paste Strategy")
+    st.caption("Manual Mode | No Quota Limit | Manual Prompting")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
@@ -180,30 +193,40 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (Server-side fetch)
+# 2. [수정됨] Hugging Face 이미지 생성 로직
 # ------------------------------------------------------------------
-def fetch_image_server_side(prompt, model="flux"):
-    safe_prompt = urllib.parse.quote(prompt[:400])
-    seed = random.randint(0, 999999)
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            return Image.open(BytesIO(response.content))
-    except: pass
-    return None
-
 def generate_image_hf(prompt, token, model_id):
+    """
+    Hugging Face Inference API를 사용하여 이미지를 생성합니다.
+    모델 로딩 시간(Cold Start)을 고려하여 재시도 로직이 포함되어 있습니다.
+    """
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {token}"}
+    
     seed = random.randint(0, 999999) 
-    payload = {"inputs": f"{prompt}, cinematic lighting, 8k, high quality", "parameters": {"seed": seed}}
-    for attempt in range(3):
+    payload = {
+        "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed",
+        "parameters": {"seed": seed}
+    }
+
+    for attempt in range(5):
         try:
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-            if response.status_code == 200: return Image.open(BytesIO(response.content))
-            elif "estimated_time" in response.json(): time.sleep(response.json().get("estimated_time", 10) + 1)
-        except: time.sleep(1)
+            
+            if response.status_code == 200:
+                return Image.open(BytesIO(response.content))
+            
+            # 모델 로딩 중일 때 (503)
+            elif "estimated_time" in response.json():
+                wait_time = response.json().get("estimated_time", 10)
+                st.toast(f"😴 모델 깨우는 중... ({wait_time:.1f}초)")
+                time.sleep(wait_time + 1)
+                continue
+            else:
+                break
+        except Exception as e:
+            time.sleep(1)
+            
     return None
 
 # ------------------------------------------------------------------
@@ -220,6 +243,9 @@ if execution_mode == "API 자동 실행 (편리함)":
     if st.button("🚀 프로젝트 시작 (Auto)"):
         if not gemini_key or not topic:
             st.warning("API Key와 주제를 입력해주세요.")
+        # HF 토큰 체크 추가
+        elif not hf_token:
+            st.warning("Hugging Face Token이 필요합니다.")
         else:
             st.session_state['generated_images'] = {} 
             st.session_state['plan_data'] = None
@@ -234,7 +260,6 @@ else: # 수동 모드 로직
     st.markdown("### 🛠️ 수동 모드 가이드")
     st.info("API 오류가 나거나 키가 없을 때 사용하는 '무적 모드'입니다.")
     
-    # 1. 프롬프트 생성 및 복사
     prompt_to_copy = get_system_prompt(topic) if topic else "주제를 먼저 입력해주세요."
     
     with st.container():
@@ -253,10 +278,9 @@ else: # 수동 모드 로직
                 st.warning("결과를 붙여넣어주세요.")
             else:
                 try:
-                    # JSON 파싱 시도
                     st.session_state['plan_data'] = json.loads(clean_json_text(manual_json_input))
-                    st.session_state['generated_images'] = {} # 이미지 초기화
-                    st.success("기획안이 성공적으로 로드되었습니다! 아래에서 이미지를 생성합니다.")
+                    st.session_state['generated_images'] = {} 
+                    st.success("기획안이 로드되었습니다! 아래에서 이미지를 생성합니다.")
                 except Exception as e:
                     st.error(f"JSON 형식 오류: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -283,7 +307,7 @@ if st.session_state['plan_data']:
         st.code(plan['visual_style']['character_prompt'], language="text")
     
     st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드")
+    st.subheader(f"🖼️ 비주얼 스토리보드 (Model: {hf_model_id.split('/')[-1]})")
 
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
@@ -305,32 +329,25 @@ if st.session_state['plan_data']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
                     st.success("✅ 생성 완료")
                 else:
-                    # 이미지 생성 로직 (자동/수동 모두 여기서 처리)
-                    # 수동 모드라도 HF 토큰이 있으면 이미지는 생성해줌
-                    
-                    if hf_token: # HF 토큰 우선
-                        if st.button(f"📸 촬영 (HF)", key=f"gen_hf_{scene_num}"):
-                            with st.spinner("생성 중..."):
+                    # Hugging Face 이미지 생성
+                    if st.button(f"📸 촬영 (HF)", key=f"gen_hf_{scene_num}"):
+                        if hf_token:
+                            with st.spinner(f"생성 중... ({hf_model_id})"):
                                 full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                                img = generate_image_hf(full_prompt, hf_token, hf_model_id) # 사이드바 선택 모델
+                                img = generate_image_hf(full_prompt, hf_token, hf_model_id) 
                                 if img:
                                     st.session_state['generated_images'][scene_num] = img
                                     st.rerun()
                                 else:
-                                    st.error("실패")
-                                    
-                    # Pollinations (무료, 토큰 불필요) 백업 버튼
-                    if st.button(f"📸 촬영 (무료)", key=f"gen_pol_{scene_num}"):
-                        msg = st.empty()
-                        msg.info("생성 중...")
-                        full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                        img_data = fetch_image_server_side(full_prompt, image_model)
-                        if img_data:
-                            st.session_state['generated_images'][scene_num] = img_data
-                            msg.empty()
-                            st.rerun()
+                                    st.error("생성 실패 (잠시 후 다시 시도하세요)")
                         else:
-                            msg.error("실패")
+                            st.warning("HF 토큰이 필요합니다.")
+                    
+                    # 다시 그리기 (이미지 있을 때)
+                    if scene_num in st.session_state['generated_images']:
+                         if st.button(f"🔄 재생성", key=f"regen_{scene_num}"):
+                            # 로직 동일
+                            pass
 
             st.markdown("</div>", unsafe_allow_html=True)
     

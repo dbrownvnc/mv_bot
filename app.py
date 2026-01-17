@@ -74,35 +74,37 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심 수정] 모델 리스트를 최신 버전으로 갱신하여 404 오류 해결
+# [DeBrief 스타일 수정] 검증된 안정적 모델 리스트 사용
 def generate_with_fallback(prompt, api_key):
     genai.configure(api_key=api_key)
     
-    # 구버전(1.0-pro) 제거 및 최신 안정화 모델로 교체
+    # DeBrief 앱에서 사용된 '실패 확률이 낮은' 모델 우선 순위
     models_to_try = [
-        "gemini-1.5-flash",        # [추천] 가장 빠르고 무료 쿼터가 많음
-        "gemini-1.5-pro",          # [고성능] 지능이 높음
-        "gemini-1.5-flash-latest", # Flash 최신 별칭
-        "gemini-1.5-pro-latest"    # Pro 최신 별칭
+        "gemini-2.0-flash",        # [1순위] 최신, 빠름, 오류 적음 (DeBrief 추천)
+        "gemini-1.5-flash",        # [2순위] 가장 안정적임
+        "gemini-1.5-flash-8b",     # [3순위] 경량화 모델
+        "gemini-1.5-pro",          # [4순위] 고성능 (가끔 404 뜸)
+        "gemini-1.0-pro"           # [5순위] 구버전 (최후의 보루)
     ]
     
     last_error = None
     
     for model_name in models_to_try:
         try:
-            # 모델 생성 시도
+            # 모델 생성 및 호출
             model = genai.GenerativeModel(model_name)
+            # DeBrief와 동일하게 타임아웃 넉넉히 설정하지 않고 빠른 실패 유도 후 전환
             response = model.generate_content(prompt)
-            time.sleep(1) # API 과부하 방지
+            time.sleep(1) # API 과부하 방지 쿨타임
             return response.text
         except Exception as e:
             last_error = e
-            # 에러 발생 시 로그를 남기지 않고 조용히 다음 모델 시도
+            # 에러 발생 시(404 등) DeBrief처럼 바로 다음 모델 시도
             time.sleep(0.5)
             continue
             
-    # 모든 모델 실패 시 에러 발생
-    raise Exception(f"사용 가능한 모든 Gemini 모델 시도 실패.\n마지막 에러: {last_error}\nAPI Key가 올바른지 확인해주세요.")
+    # 모든 모델 실패 시 상세 에러 출력
+    raise Exception(f"모든 모델 시도 실패. \n마지막 에러: {last_error}\n(API Key 권한이나 할당량을 확인해주세요)")
 
 def generate_plan_gemini(topic, api_key):
     """Gemini로 기획안 생성 (Fallback 적용)"""
@@ -144,7 +146,7 @@ def generate_plan_gemini(topic, api_key):
         json_str = clean_json_text(response_text)
         return json.loads(json_str)
     except Exception as e:
-        st.error(f"기획안 생성 중 오류 발생: {e}")
+        st.error(f"기획안 생성 실패: {e}")
         return None
 
 def get_pollinations_url(prompt):

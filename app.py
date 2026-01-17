@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Ultimate v84)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Refined)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -39,7 +39,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- API 키 로드 (범용 함수) ---
+# --- API 키 로드 ---
 def get_api_key(key_name):
     if key_name in st.secrets:
         return st.secrets[key_name]
@@ -49,7 +49,7 @@ def get_api_key(key_name):
 
 # --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정 (Ultimate v84)")
+    st.header("⚙️ 설정 (Refined)")
     
     # 1. Gemini Key
     gemini_key = get_api_key("GOOGLE_API_KEY")
@@ -60,21 +60,28 @@ with st.sidebar:
     
     st.markdown("---")
 
-    # 2. [벤치마킹] Gemini 모델 선택 (v84 앱 스타일)
-    st.subheader("🧠 기획 모델 (Gemini)")
-    # v84 앱에서 사용된 백업 리스트를 기반으로 옵션 구성
-    gemini_options = [
-        "gemini-1.5-flash",        # [추천] 가장 안정적
+    # 2. [핵심 적용] app_final_v84.py와 동일한 모델 선택 UI
+    st.subheader("🤖 AI 모델 선택")
+    # 첨부 파일의 model_options 리스트 그대로 사용
+    gemini_model_options = [
+        "gemini-1.5-pro", 
         "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-pro",          
-        "gemini-1.5-flash-8b",     
-        "gemini-1.0-pro"           
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"
     ]
-    selected_gemini_model = st.selectbox("우선 시도할 모델", gemini_options, index=0)
-
+    # 첨부 파일과 동일하게 selectbox 구성
+    selected_gemini_model = st.selectbox(
+        "기본 분석 모델", 
+        gemini_model_options, 
+        index=0, 
+        label_visibility="collapsed"
+    )
+    
     st.markdown("---")
     
-    # 3. HF Token (이미지 생성용 - Rate Limit 해결책)
+    # 3. HF Token & Model (기존 유지)
     hf_token = get_api_key("HF_TOKEN")
     if hf_token:
         st.success("✅ Hugging Face Token 연결됨")
@@ -82,7 +89,6 @@ with st.sidebar:
         hf_token = st.text_input("Hugging Face Token", type="password")
         st.caption("[👉 토큰 발급](https://huggingface.co/settings/tokens)")
     
-    # 4. HF Image Model
     st.subheader("🎨 화가 모델 (Hugging Face)")
     hf_model_id = st.selectbox(
         "사용할 이미지 모델",
@@ -100,13 +106,13 @@ with st.sidebar:
         st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (Ultimate v84)")
-st.subheader("강력한 모델 생존 시스템 & 고화질 스토리보드")
+st.title("🎬 AI MV Director (Refined)")
+st.subheader("검증된 Gemini 엔진 & 고화질 스토리보드")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# [핵심] app_final_v84.py의 로직 완벽 이식
+# [핵심] app_final_v84.py의 Gemini 로직 완벽 이식
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -116,18 +122,14 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
+# [변경] 첨부 파일의 generate_with_fallback 함수 로직 그대로 적용
 def generate_with_fallback(prompt, api_key, start_model):
-    """
-    app_final_v84.py의 핵심 함수입니다.
-    상위 모델 실패 시, 사전에 정의된 백업 리스트를 순차적으로 실행하여
-    어떻게든 결과를 만들어냅니다.
-    """
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델을 체인의 첫 번째로 둠
+    # 1. 시작 모델 설정
     fallback_chain = [start_model]
     
-    # 2. v84 앱에 정의된 강력한 백업 리스트
+    # 2. 백업 모델 리스트 (첨부 파일의 backups 리스트와 동일)
     backups = [
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash", 
@@ -136,34 +138,30 @@ def generate_with_fallback(prompt, api_key, start_model):
         "gemini-flash-latest"
     ]
     
-    # 3. 중복 방지하며 체인 연결
+    # 3. 체인 구성 (중복 방지 로직 포함)
     for b in backups:
         if b != start_model: 
             fallback_chain.append(b)
             
     last_error = None
     
-    # 4. 순차 실행 (v84 로직)
+    # 4. 순차 실행 (첨부 파일의 try-except 구조 및 sleep 시간 동일 적용)
     for model_name in fallback_chain:
         try:
-            # 모델 생성 및 호출
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            # 성공 시 1초 대기 (v84의 Rate Limit 스무딩 기법)
-            time.sleep(1)
+            # 성공 시 1초 대기 (첨부 파일 로직)
+            time.sleep(1) 
             
-            # 텍스트와 성공한 모델명 반환
             return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 실패 시 0.5초 대기 후 즉시 다음 모델 시도 (v84 로직)
-            # print(f"⚠️ {model_name} 실패 -> 재시도... ({e})")
+            # 실패 시 0.5초 대기 (첨부 파일 로직)
             time.sleep(0.5)
             continue
             
-    # 모든 모델 실패 시
     raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
@@ -197,10 +195,9 @@ def generate_plan_gemini(topic, api_key, model_name):
           ]
         }}
         """
-        # [핵심] v84 스타일 폴백 함수 호출
+        # 이식된 폴백 함수 호출
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
         
-        # 성공한 모델을 토스트 메시지로 알림
         st.toast(f"✅ 기획 생성 성공! (Used Model: {used_model})")
         
         return json.loads(clean_json_text(response_text))
@@ -209,7 +206,7 @@ def generate_plan_gemini(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# [유지] Hugging Face 이미지 생성 (Rate Limit 문제 해결책)
+# [유지] Hugging Face 이미지 생성 (이전 성공 버전)
 # ------------------------------------------------------------------
 
 def generate_image_hf(prompt, token, model_id):
@@ -257,7 +254,7 @@ if start_btn:
     else:
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
             st.session_state['generated_images'] = {} 
-            # [핵심] 사이드바에서 선택한 모델을 시작점으로 전달
+            # 사이드바에서 선택한 모델을 사용
             st.session_state['plan_data'] = generate_plan_gemini(topic, gemini_key, selected_gemini_model)
             status.update(label="기획안 작성 완료!", state="complete", expanded=False)
 

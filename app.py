@@ -11,9 +11,9 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (HF)", layout="wide")
+st.set_page_config(page_title="AI MV Director (HF Edition)", layout="wide")
 
-# --- 스타일링 ---
+# --- 스타일링 (유지) ---
 st.markdown("""
 <style>
     .scene-box {
@@ -29,77 +29,73 @@ st.markdown("""
         width: 100%;
         border-radius: 8px;
     }
+    .regen-btn {
+        background-color: #f0f2f6;
+        color: #333;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- [핵심] API 키 로드 함수 (Secrets 우선) ---
+# --- API 키 로드 (범용 함수로 변경) ---
 def get_api_key(key_name):
-    """
-    1. Streamlit Secrets (클라우드/로컬 설정)
-    2. 환경변수 (Environment Variable)
-    순서로 키를 찾습니다.
-    """
-    try:
-        if key_name in st.secrets:
-            return st.secrets[key_name]
-    except:
-        pass
-        
-    if os.getenv(key_name):
+    # 1. Streamlit Secrets에서 확인
+    if key_name in st.secrets:
+        return st.secrets[key_name]
+    # 2. 환경변수에서 확인
+    elif os.getenv(key_name):
         return os.getenv(key_name)
     return None
 
 # --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정 (Hugging Face)")
+    st.header("⚙️ 설정 (HF Edition)")
     
-    # 1. Google Gemini Key 자동 로드
+    # 1. Google Gemini API Key
     gemini_key = get_api_key("GOOGLE_API_KEY")
     if gemini_key:
-        st.success("✅ Gemini Key 로드됨")
+        st.success("✅ Gemini Key 연결됨")
     else:
         gemini_key = st.text_input("Google Gemini API Key", type="password")
     
     st.markdown("---")
     
-    # 2. [수정됨] Hugging Face Token 자동 로드
+    # 2. [NEW] Hugging Face Token (Secrets에서 가져오기 적용)
     hf_token = get_api_key("HF_TOKEN")
-    
     if hf_token:
-        st.success("✅ Hugging Face Token 로드됨")
+        st.success("✅ Hugging Face Token 연결됨")
     else:
-        # Secrets에 없으면 입력창 표시
-        hf_token = st.text_input("Hugging Face Access Token", type="password")
-        st.caption("Secrets에 'HF_TOKEN'을 설정하면 자동 입력됩니다.")
-        st.markdown("[👉 토큰 발급받기 (Write 권한)](https://huggingface.co/settings/tokens)")
-
+        hf_token = st.text_input("Hugging Face Token", type="password", help="Write 권한이 있는 토큰을 입력하세요.")
+        st.caption("[👉 토큰 발급받기](https://huggingface.co/settings/tokens)")
+    
     st.markdown("---")
     
-    # 3. 모델 선택
-    st.subheader("🎨 화가 모델 (Hugging Face)")
+    # 3. 모델 선택 (Hugging Face 모델 ID)
+    st.subheader("🎨 화가 모델 선택")
+    
+    # Flux 모델과 SDXL 모델 등 선택 가능
     hf_model_id = st.selectbox(
         "사용할 모델 ID",
         [
-            "black-forest-labs/FLUX.1-dev",     # 1순위: 최신 고화질
-            "black-forest-labs/FLUX.1-schnell", # 2순위: 초고속
-            "stabilityai/stable-diffusion-xl-base-1.0", # 3순위: SDXL
-            "stabilityai/stable-diffusion-3.5-large"  # 4순위: SD3.5
+            "black-forest-labs/FLUX.1-dev",     # 1순위: 최신 고화질 (추천)
+            "black-forest-labs/FLUX.1-schnell", # 2순위: 고속 버전
+            "stabilityai/stable-diffusion-xl-base-1.0", # 3순위: 안정적인 SDXL
         ],
-        index=0
+        index=0,
+        help="FLUX.1-dev가 퀄리티가 가장 좋습니다."
     )
-    
+
     st.markdown("---")
     if st.button("🗑️ 프로젝트 초기화"):
         st.session_state.clear()
         st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (HF Edition)")
-st.subheader("Secrets 연동 & 끊김 없는 고화질 스토리보드")
+st.title("🎬 AI MV Director (Hugging Face)")
+st.subheader("끊김 없는 고화질 스토리보드 (Flux 지원)")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# --- [유지] Gemini 로직 (DeBrief 안정 버전) ---
+# --- Gemini 로직 (기존 성공 버전 그대로 유지) ---
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -110,14 +106,7 @@ def clean_json_text(text):
 
 def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     genai.configure(api_key=api_key)
-    # DeBrief 앱에서 검증된 모델 리스트 (404 에러 방지)
-    backups = [
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
-    ]
+    backups = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
     fallback_chain = [start_model] + [b for b in backups if b != start_model]
     
     last_error = None
@@ -170,22 +159,25 @@ def generate_plan_gemini(topic, api_key):
         st.error(f"기획안 오류: {e}")
         return None
 
-# --- [유지] Hugging Face 이미지 생성 함수 (서버 다운로드 방식) ---
+# --- [수정됨] Hugging Face 이미지 생성 함수 (API 호출 방식) ---
 def generate_image_hf(prompt, token, model_id):
     """
-    파이썬 내부에서 이미지를 다운로드하여 브라우저 차단을 방지합니다.
+    Hugging Face Inference API를 사용하여 이미지를 생성합니다.
+    503(모델 로딩) 에러 시 자동 대기 기능을 포함합니다.
     """
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {token}"}
     
     seed = random.randint(0, 999999) 
     
+    # Flux 모델 등에 맞는 Payload
     payload = {
-        "inputs": f"{prompt}, high quality, cinematic lighting, 8k",
-        "parameters": {"seed": seed}
+        "inputs": f"{prompt}, cinematic lighting, 8k, high quality",
+        "parameters": {"seed": seed} 
     }
 
-    for attempt in range(5): # 모델 깨우기 재시도 로직
+    # 최대 5번 재시도 (모델 깨우기)
+    for attempt in range(5):
         try:
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
             
@@ -194,17 +186,16 @@ def generate_image_hf(prompt, token, model_id):
             
             elif "estimated_time" in response.json():
                 wait_time = response.json().get("estimated_time", 10)
-                st.toast(f"😴 모델 로딩 중... ({wait_time:.1f}초 대기)")
+                st.toast(f"😴 모델 깨우는 중... ({wait_time:.1f}초)")
                 time.sleep(wait_time + 1)
                 continue
-                
             else:
-                st.error(f"API Error: {response.text}")
+                # 에러 발생 시 로그 출력 (디버깅용)
+                print(f"Error: {response.text}")
                 break
                 
         except Exception as e:
-            st.error(f"요청 오류: {e}")
-            time.sleep(2)
+            time.sleep(1)
             
     return None
 
@@ -265,22 +256,27 @@ if st.session_state['plan_data']:
                     st.code(scene['image_prompt'], language="text")
             
             with col_img:
+                # 1. 이미지가 있으면 표시
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
                 else:
+                    # 2. 없으면 HF API로 생성 시도
                     if hf_token:
-                        with st.spinner(f"📸 Hugging Face에서 생성 중... ({hf_model_id})"):
+                        with st.spinner("📸 촬영 중..."):
                              full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                             
+                             # HF API 호출
                              img_data = generate_image_hf(full_prompt, hf_token, hf_model_id)
                              
                              if img_data:
                                  st.session_state['generated_images'][scene_num] = img_data
                                  st.image(img_data, use_container_width=True)
                              else:
-                                 st.error("이미지 생성 실패")
+                                 st.error("이미지 생성 실패 (토큰 권한 확인)")
                     else:
-                        st.warning("Token 필요")
+                        st.info("토큰을 입력해주세요.")
 
+                # 3. 개별 재생성 버튼
                 if st.button(f"🔄 다시 그리기", key=f"regen_{scene_num}"):
                      if hf_token:
                         with st.spinner("📸 재촬영 중..."):
@@ -290,8 +286,6 @@ if st.session_state['plan_data']:
                             if img_data:
                                 st.session_state['generated_images'][scene_num] = img_data
                                 st.rerun()
-                     else:
-                         st.error("Token 필요")
             
             st.markdown("</div>", unsafe_allow_html=True)
 

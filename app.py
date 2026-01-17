@@ -6,9 +6,12 @@ import re
 import urllib.parse
 import time
 import random
+import requests
+from io import BytesIO
+from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Pro)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Final)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -24,6 +27,7 @@ st.markdown("""
     }
     .stButton>button {
         width: 100%;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -38,7 +42,7 @@ def get_api_key():
 
 # --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정 (Pro Edition)")
+    st.header("⚙️ 설정 (Final)")
     
     # 1. API Key
     loaded_key = get_api_key()
@@ -50,19 +54,16 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 2. [NEW] 이미지 모델 선택 옵션
-    st.subheader("🎨 화가 모델 선택")
-    image_model = st.selectbox(
-        "사용할 이미지 생성 모델",
-        ["flux", "turbo", "midjourney", "anime", "3d-render"],
-        index=0,
-        help="Flux: 고화질(느림), Turbo: 무제한(빠름), Anime: 애니 스타일"
+    # 2. [NEW] 이미지 서비스 선택 (대안 추가)
+    st.subheader("🎨 이미지 서비스 선택")
+    image_service = st.selectbox(
+        "사용할 서비스",
+        ["Pollinations (Flux)", "Pollinations (Turbo)", "Hercai (SDXL)"],
+        index=1, # Turbo를 기본값으로 (가장 빠름)
+        help="Pollinations가 안 되면 Hercai를 선택하세요."
     )
     
-    if image_model == "flux":
-        st.info("ℹ️ Flux는 고화질이지만 요청 제한이 있을 수 있습니다. 안 되면 Turbo를 쓰세요.")
-    elif image_model == "turbo":
-        st.success("⚡ Turbo는 속도가 빠르고 제한이 거의 없습니다.")
+    st.info(f"현재 선택: {image_service}")
 
     st.markdown("---")
     if st.button("🗑️ 프로젝트 초기화"):
@@ -70,12 +71,12 @@ with st.sidebar:
         st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (Pro)")
-st.subheader("모델 선택 & 개별 재생성 기능 탑재")
+st.title("🎬 AI MV Director (Final)")
+st.subheader("등록 없는 무료 이미지 API & 강력한 다운로드 모드")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# --- [유지] Gemini 로직 (DeBrief 폴백 적용) ---
+# --- Gemini 로직 (유지) ---
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -139,21 +140,51 @@ def generate_plan_gemini(topic, api_key):
         st.error(f"기획안 오류: {e}")
         return None
 
-# --- [업그레이드] 이미지 URL 생성 함수 (모델 선택 반영) ---
-def get_pollinations_url(prompt, model_name):
-    safe_prompt = prompt[:450]
-    encoded = urllib.parse.quote(safe_prompt)
-    seed = random.randint(0, 9999999) # 완전 랜덤 시드
+# --- [핵심 수정] 이미지 직접 다운로드 함수 (브라우저 차단 우회) ---
+def fetch_image_from_api(prompt, service_type):
+    """
+    URL을 주는 게 아니라, 파이썬이 직접 이미지를 다운로드해서 가져옵니다.
+    이 방식은 브라우저 차단을 100% 우회합니다.
+    """
+    safe_prompt = prompt[:400]
+    seed = random.randint(0, 999999)
     
-    # 선택된 모델 적용
-    return f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=576&model={model_name}&nologo=true&seed={seed}&enhance=false"
+    try:
+        # 1. Pollinations (Flux/Turbo)
+        if "Pollinations" in service_type:
+            model = "flux" if "Flux" in service_type else "turbo"
+            encoded = urllib.parse.quote(safe_prompt)
+            url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
+            
+            # 파이썬 내부에서 다운로드
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            return Image.open(BytesIO(response.content))
+            
+        # 2. Hercai (대안 서비스)
+        elif "Hercai" in service_type:
+            # Hercai API 호출
+            api_url = f"https://hercai.onrender.com/v3/text2image?prompt={urllib.parse.quote(safe_prompt)}"
+            response = requests.get(api_url, timeout=30) # Hercai는 조금 느릴 수 있음
+            data = response.json()
+            
+            if "url" in data:
+                # 이미지 URL을 받아서 다시 다운로드
+                img_response = requests.get(data["url"], timeout=15)
+                return Image.open(BytesIO(img_response.content))
+            else:
+                return None
+                
+    except Exception as e:
+        st.warning(f"이미지 다운로드 실패 ({service_type}): {e}")
+        return None
 
 # --- 실행 로직 ---
 
 if 'plan_data' not in st.session_state:
     st.session_state['plan_data'] = None
 if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {} 
+    st.session_state['generated_images'] = {} # {scene_num: PIL.Image 객체} 저장
 
 start_btn = st.button("🚀 프로젝트 시작")
 
@@ -166,7 +197,7 @@ if start_btn:
             st.session_state['plan_data'] = generate_plan_gemini(topic, api_key)
             status.update(label="기획안 작성 완료!", state="complete", expanded=False)
 
-# 화면 표시 로직
+# 화면 표시
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -185,9 +216,8 @@ if st.session_state['plan_data']:
         st.code(plan['visual_style']['character_prompt'], language="text")
     
     st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드")
+    st.subheader(f"🖼️ 비주얼 스토리보드 (Service: {image_service})")
 
-    # 씬별 반복
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         
@@ -208,30 +238,31 @@ if st.session_state['plan_data']:
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
                 else:
-                    # 없으면 자동 생성 시도 (Turbo 모드면 빠름)
-                    if image_model == "turbo": # 터보는 바로 생성
+                    # 2. 없으면 자동 생성 시도 (Python 내부 다운로드 방식)
+                    with st.spinner(f"📸 {image_service} 서버에서 이미지 다운로드 중..."):
                          full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                         img_url = get_pollinations_url(full_prompt, image_model)
-                         st.session_state['generated_images'][scene_num] = img_url
-                         st.image(img_url, use_container_width=True)
-                    else:
-                        st.info("👇 아래 버튼을 눌러 이미지를 생성하세요.")
+                         
+                         # [핵심] URL을 주는 게 아니라 이미지를 받아옴
+                         img_data = fetch_image_from_api(full_prompt, image_service)
+                         
+                         if img_data:
+                             st.session_state['generated_images'][scene_num] = img_data
+                             st.image(img_data, use_container_width=True)
+                         else:
+                             st.error("이미지 생성 실패. 잠시 후 재생성 버튼을 눌러주세요.")
 
-                # 2. [NEW] 개별 재생성 버튼 (핵심 기능)
-                # 이 버튼을 누르면 해당 씬만 이미지를 새로 뽑아서 덮어씀
-                if st.button(f"🔄 Scene {scene_num} 이미지 생성/재생성", key=f"regen_{scene_num}"):
-                    with st.spinner("📸 찰칵!"):
+                # 3. 개별 재생성 버튼
+                if st.button(f"🔄 다시 그리기", key=f"regen_{scene_num}"):
+                    with st.spinner("📸 재촬영 중..."):
                         full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                         
-                        # 사이드바에서 선택된 모델로 URL 생성
-                        new_url = get_pollinations_url(full_prompt, image_model)
+                        img_data = fetch_image_from_api(full_prompt, image_service)
                         
-                        # 세션 업데이트
-                        st.session_state['generated_images'][scene_num] = new_url
-                        st.rerun() # 화면 갱신
+                        if img_data:
+                            st.session_state['generated_images'][scene_num] = img_data
+                            st.rerun()
             
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # 전체 완료 메시지 (이미지가 다 찼을 때만)
     if len(st.session_state['generated_images']) == len(plan['scenes']):
         st.success("✨ 스토리보드 완성!")

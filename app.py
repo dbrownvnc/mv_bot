@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Process View)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Exact Replica)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -58,23 +58,21 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 모델 선택 (DeBrief 앱의 성공 모델 리스트 적용)
+    # [핵심] 첨부파일 Line 446과 100% 동일한 모델 리스트
     st.subheader("🤖 분석 모델 (DeBrief Engine)")
-    gemini_model = st.selectbox(
-        "기본 모델",
-        [
-            "gemini-2.0-flash-lite-preview-02-05", # DeBrief 1순위
-            "gemini-1.5-flash",        # 안정성 1위
-            "gemini-1.5-flash-8b",     # 초고속
-            "gemini-1.5-pro",
-            "gemini-1.0-pro"
-        ],
-        index=0
-    )
+    model_options = [
+        "gemini-1.5-pro", 
+        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"
+    ]
+    gemini_model = st.selectbox("기본 모델", model_options, index=0) # 기본값: 1.5-pro
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
-    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0) # Flux 고화질
+    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -82,12 +80,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief 엔진 탑재 | 실시간 생성 프로세스 시각화")
+st.caption("DeBrief 엔진 (Exact Ver.) | 실시간 생성 프로세스")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (DeBrief 앱의 생존형 폴백 로직 100% 이식)
+# 1. Gemini 로직 (첨부파일 generate_with_fallback 완벽 이식)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -97,54 +95,57 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
+# [핵심] 첨부파일 Line 229 ~ 243 로직 복원
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # DeBrief 앱의 핵심: 실패 시 다음 모델로 무조건 넘어가는 리스트
-    # start_model을 가장 앞에 두고, 나머지를 뒤에 붙임
-    backup_models = [
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro"
+    # 1. 시작 모델 설정
+    fallback_chain = [start_model]
+    
+    # 2. 첨부파일 Line 232의 backups 리스트 (정확히 일치시킴)
+    backups = [
+        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"
     ]
     
-    # 중복 제거 및 체인 생성
-    fallback_chain = [start_model] + [m for m in backup_models if m != start_model]
+    # 3. 체인 구성 (중복 방지)
+    for b in backups:
+        if b != start_model: 
+            fallback_chain.append(b)
     
     last_error = None
-    log_placeholder = st.empty() # 진행 상황 표시용
+    log_placeholder = st.empty() # 진행 상황 표시용 (UI 추가)
     
+    # 4. 순차 실행
     for model_name in fallback_chain:
         try:
-            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델로 생각 중...</div>", unsafe_allow_html=True)
+            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델로 생성 시도 중...</div>", unsafe_allow_html=True)
             
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            time.sleep(1) # 안정성 대기
-            log_placeholder.empty() # 성공하면 로그 지움
+            time.sleep(1) # 첨부파일 Line 237 (1초 대기)
+            log_placeholder.empty()
+            
             return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 실패 시 로그 찍고 다음으로
-            # st.toast(f"⚠️ {model_name} 실패 -> 다음 모델 시도") 
-            time.sleep(0.5)
+            # 실패 시 로그 찍고 잠시 대기
+            time.sleep(0.5) # 첨부파일 Line 241 (0.5초 대기)
             continue
             
+    # 모든 모델 실패 시
     raise Exception(f"All models failed. Last Error: {last_error}")
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (파이썬 내부 다운로드 -> 브라우저 차단 해결)
+# 2. 이미지 생성 로직 (서버 사이드 다운로드 유지)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
-    """
-    브라우저가 아닌 서버(Python)가 이미지를 직접 받아옵니다.
-    이 방식은 한 장만 나오고 멈추는 문제를 100% 해결합니다.
-    """
     safe_prompt = urllib.parse.quote(prompt[:400])
     seed = random.randint(0, 999999)
     url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
@@ -158,14 +159,13 @@ def fetch_image_server_side(prompt, model="flux"):
     return None
 
 # ------------------------------------------------------------------
-# 3. 실행 로직 (과정을 순서대로 보여주기)
+# 3. 실행 로직
 # ------------------------------------------------------------------
 
-# 세션 상태 초기화
 if 'plan_data' not in st.session_state:
     st.session_state['plan_data'] = None
 if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {} # {scene_num: ImageObject}
+    st.session_state['generated_images'] = {} 
 
 start_btn = st.button("🚀 프로젝트 시작")
 
@@ -174,7 +174,7 @@ if start_btn:
         st.warning("API Key와 주제를 입력해주세요.")
     else:
         # [단계 1] 기획안 생성
-        st.session_state['generated_images'] = {} # 이미지 초기화
+        st.session_state['generated_images'] = {} 
         st.session_state['plan_data'] = None
         
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
@@ -209,7 +209,7 @@ if start_btn:
             """
             
             try:
-                # Gemini 호출
+                # [수정] 첨부파일과 동일한 함수 호출
                 raw_text, used_model = generate_with_fallback(prompt, gemini_key, gemini_model)
                 st.session_state['plan_data'] = json.loads(clean_json_text(raw_text))
                 status.update(label=f"기획 완료! (모델: {used_model})", state="complete", expanded=False)
@@ -217,7 +217,7 @@ if start_btn:
             except Exception as e:
                 st.error(f"기획안 생성 실패: {e}")
 
-# [단계 2] 기획안이 있으면 텍스트 먼저 표시
+# [단계 2] 결과 표시
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -238,13 +238,10 @@ if st.session_state['plan_data']:
     st.markdown("---")
     st.subheader("🖼️ 비주얼 스토리보드 제작")
 
-    # [단계 3] 씬별 순차적 생성 및 표시 (Real-time Generation)
-    # 이미지가 없는 씬이 있다면, 여기서 즉시 생성해서 보여줌
-    
+    # [단계 3] 씬별 순차적 생성
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         
-        # UI 틀 잡기
         with st.container():
             st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
             st.markdown(f"#### 🎬 Scene {scene_num} <span style='font-size:0.8em; color:gray'>({scene['timecode']})</span>", unsafe_allow_html=True)
@@ -258,32 +255,25 @@ if st.session_state['plan_data']:
                     st.code(scene['image_prompt'], language="text")
             
             with col_img:
-                # 1. 이미 메모리에 저장된 이미지가 있으면 보여줌
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
                     st.success("✅ 생성 완료")
                 
-                # 2. 없으면 '지금' 생성 (실시간 프로세스 시각화)
                 else:
-                    # 빈 공간 확보
                     img_placeholder = st.empty()
                     status_placeholder = st.empty()
                     
                     status_placeholder.info(f"📸 Scene {scene_num} 촬영 중... (AI가 그리는 중)")
                     
-                    # 프롬프트 조합
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                     
-                    # 서버 사이드 다운로드 (안정성 핵심)
+                    # 이미지 생성
                     img_data = fetch_image_server_side(full_prompt, image_model)
                     
                     if img_data:
-                        # 세션에 저장
                         st.session_state['generated_images'][scene_num] = img_data
-                        # 화면에 표시
                         status_placeholder.empty()
                         img_placeholder.image(img_data, use_container_width=True)
-                        # 다음 씬 생성을 위해 약간의 텀을 두고 Rerun (순차적 애니메이션 효과)
                         time.sleep(0.5) 
                         st.rerun()
                     else:
@@ -291,6 +281,5 @@ if st.session_state['plan_data']:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # 모든 씬 생성 완료 시
     if len(st.session_state['generated_images']) == len(plan['scenes']):
-        st.success("✨ 모든 촬영이 종료되었습니다! (프로젝트 완성)")
+        st.success("✨ 모든 촬영이 종료되었습니다!")

@@ -6,12 +6,9 @@ import re
 import urllib.parse
 import time
 import random
-import requests
-from io import BytesIO
-from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Free Tier Optimized)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Turbo)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -22,71 +19,80 @@ st.markdown("""
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border-left: 6px solid #34A853; /* Google Green */
+        border-left: 6px solid #FF4B4B;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .process-log {
-        font-family: monospace;
-        font-size: 0.9em;
-        color: #0066cc;
-        background-color: #f0f7ff;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
+    }
+    /* 재생성 버튼 스타일 강조 */
+    .regen-btn {
+        background-color: #f0f2f6;
+        color: #333;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- API 키 로드 ---
-def get_api_key(key_name):
-    if key_name in st.secrets:
-        return st.secrets[key_name]
-    elif os.getenv(key_name):
-        return os.getenv(key_name)
+def get_api_key():
+    if "GOOGLE_API_KEY" in st.secrets:
+        return st.secrets["GOOGLE_API_KEY"]
+    elif os.getenv("GOOGLE_API_KEY"):
+        return os.getenv("GOOGLE_API_KEY")
     return None
 
 # --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정")
+    st.header("⚙️ 설정 (Pro Edition)")
     
-    gemini_key = get_api_key("GOOGLE_API_KEY")
-    if gemini_key:
-        st.success("✅ Gemini Key 연결됨")
+    # 1. API Key
+    loaded_key = get_api_key()
+    if loaded_key:
+        st.success("✅ API Key 연결됨")
+        api_key = loaded_key
     else:
-        gemini_key = st.text_input("Google Gemini API Key", type="password")
+        api_key = st.text_input("Google Gemini API Key", type="password")
     
     st.markdown("---")
     
-    # [전략 수정] 무료 사용자에게 가장 유리한 모델을 기본값으로 설정
-    st.subheader("🤖 분석 모델")
-    st.caption("무료 계정 최적화 순서입니다.")
+    # 2. [수정됨] 이미지 모델 선택 (Turbo 기본)
+    st.subheader("🎨 화가 모델 선택")
     
-    model_options = [
-        "gemini-1.5-flash",        # [1순위] 하루 1500회 무료 (절대 안 막힘)
-        "gemini-2.0-flash-lite-preview-02-05", # [2순위] 성능 좋음 (하루 50회 제한)
-        "gemini-1.5-flash-8b",     # [3순위] 초경량
-        "gemini-1.5-pro",          # [4순위] 고성능 (제한 심함)
-        "gemini-1.0-pro"           # [5순위] 구버전
-    ]
-    gemini_model = st.selectbox("우선 사용 모델", model_options, index=0)
+    # 리스트 순서를 바꿔서 turbo가 0번(기본)이 되도록 함
+    model_options = ["turbo", "flux", "midjourney", "anime", "3d-render"]
+    image_model = st.selectbox(
+        "사용할 모델",
+        model_options,
+        index=0, # 0번 인덱스인 'turbo'가 기본값
+        help="Turbo: 무제한/빠름, Flux: 고화질/느림"
+    )
     
-    st.markdown("---")
-    st.subheader("🎨 이미지 모델")
-    image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
+    if image_model == "turbo":
+        st.success("⚡ Turbo 모드: 속도가 빠르고 제한이 없습니다.")
+    elif image_model == "flux":
+        st.info("ℹ️ Flux 모드: 고화질이지만 요청 제한이 걸릴 수 있습니다.")
 
-    if st.button("🗑️ 초기화"):
+    st.markdown("---")
+    
+    # 3. [추가됨] 모델 변경 즉시 적용 버튼
+    if st.button("🔄 선택한 모델로 전체 다시 그리기"):
+        # 생성된 이미지 기록만 날리고 화면 갱신 -> 다시 그리게 유도
+        st.session_state['generated_images'] = {}
+        st.rerun()
+
+    st.markdown("---")
+    if st.button("🗑️ 프로젝트 완전 초기화"):
         st.session_state.clear()
         st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director")
-st.caption("무료 계정 최적화 엔진 | 실시간 생성 프로세스")
+st.title("🎬 AI MV Director (Turbo)")
+st.subheader("초고속 스토리보드 제작 & 모델 즉시 변경")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# ------------------------------------------------------------------
-# 1. Gemini 로직 (DeBrief 로직 + 무료 계정 최적화)
-# ------------------------------------------------------------------
+# --- Gemini 로직 (유지) ---
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -95,67 +101,71 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-def generate_with_fallback(prompt, api_key, start_model):
+def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     genai.configure(api_key=api_key)
-    
-    # [전략] 사용자가 선택한 모델을 1순위로 하되,
-    # 나머지는 '실패 확률이 낮은 순서'로 배치하여 생존율을 높임
-    backup_models = [
-        "gemini-1.5-flash",        # 구원투수 1위
-        "gemini-1.5-flash-8b",     # 구원투수 2위
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro"
-    ]
-    
-    fallback_chain = [start_model]
-    for b in backup_models:
-        if b != start_model:
-            fallback_chain.append(b)
+    backups = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
+    fallback_chain = [start_model] + [b for b in backups if b != start_model]
     
     last_error = None
-    log_placeholder = st.empty()
-    
     for model_name in fallback_chain:
         try:
-            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델 연결 시도...</div>", unsafe_allow_html=True)
-            
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            
-            time.sleep(1) 
-            log_placeholder.empty() # 성공 시 로그 삭제
+            time.sleep(1)
             return response.text, model_name 
-            
         except Exception as e:
             last_error = e
-            # 429(Quota) 에러면 콘솔에만 출력하고 빠르게 다음으로
-            # 404(Model not found)도 마찬가지
-            time.sleep(0.5) 
+            time.sleep(0.5)
             continue
-            
-    raise Exception(f"모든 모델 연결 실패. (API Key 상태를 확인해주세요) Last Error: {last_error}")
+    raise Exception(f"모델 생성 실패: {last_error}")
 
-# ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (서버 사이드 다운로드)
-# ------------------------------------------------------------------
-
-def fetch_image_server_side(prompt, model="flux"):
-    safe_prompt = urllib.parse.quote(prompt[:400])
-    seed = random.randint(0, 999999)
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
-    
+def generate_plan_gemini(topic, api_key):
     try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            return Image.open(BytesIO(response.content))
+        prompt = f"""
+        You are a professional Music Video Director.
+        Analyze the following theme: "{topic}"
+        Create a detailed plan in JSON format ONLY.
+        
+        JSON Structure:
+        {{
+          "project_title": "Creative Title (Korean)",
+          "logline": "One sentence concept (Korean)",
+          "music": {{
+            "style": "Genre and Mood (Korean)",
+            "suno_prompt": "English prompt for music AI."
+          }},
+          "visual_style": {{
+            "description": "Visual tone (Korean)",
+            "character_prompt": "English description of the main character."
+          }},
+          "scenes": [
+            {{
+              "scene_num": 1,
+              "timecode": "00:00-00:05",
+              "action": "Scene description (Korean)",
+              "camera": "Shot type (Korean)",
+              "image_prompt": "Highly detailed English prompt for image generation."
+            }}
+            // Create 4 scenes total
+          ]
+        }}
+        """
+        response_text, _ = generate_with_fallback(prompt, api_key, "gemini-1.5-flash")
+        return json.loads(clean_json_text(response_text))
     except Exception as e:
-        print(f"Image Error: {e}")
-    return None
+        st.error(f"기획안 오류: {e}")
+        return None
 
-# ------------------------------------------------------------------
-# 3. 실행 로직 (실시간 시각화)
-# ------------------------------------------------------------------
+# --- 이미지 URL 생성 (모델 적용) ---
+def get_pollinations_url(prompt, model_name):
+    safe_prompt = prompt[:450]
+    encoded = urllib.parse.quote(safe_prompt)
+    seed = random.randint(0, 9999999)
+    
+    # 사용자가 선택한 model_name을 URL에 반영
+    return f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=576&model={model_name}&nologo=true&seed={seed}&enhance=false"
+
+# --- 실행 로직 ---
 
 if 'plan_data' not in st.session_state:
     st.session_state['plan_data'] = None
@@ -165,53 +175,15 @@ if 'generated_images' not in st.session_state:
 start_btn = st.button("🚀 프로젝트 시작")
 
 if start_btn:
-    if not gemini_key or not topic:
+    if not api_key or not topic:
         st.warning("API Key와 주제를 입력해주세요.")
     else:
-        # [단계 1] 기획안 생성
-        st.session_state['generated_images'] = {} 
-        st.session_state['plan_data'] = None
-        
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
-            prompt = f"""
-            You are a professional Music Video Director.
-            Analyze the following theme: "{topic}"
-            Create a detailed plan in JSON format ONLY.
-            
-            JSON Structure:
-            {{
-              "project_title": "Creative Title (Korean)",
-              "logline": "One sentence concept (Korean)",
-              "music": {{
-                "style": "Genre and Mood (Korean)",
-                "suno_prompt": "English prompt for music AI."
-              }},
-              "visual_style": {{
-                "description": "Visual tone (Korean)",
-                "character_prompt": "English description of the main character."
-              }},
-              "scenes": [
-                {{
-                  "scene_num": 1,
-                  "timecode": "00:00-00:05",
-                  "action": "Scene description (Korean)",
-                  "camera": "Shot type (Korean)",
-                  "image_prompt": "Highly detailed English prompt for image generation."
-                }}
-                // Create 4 scenes total
-              ]
-            }}
-            """
-            
-            try:
-                raw_text, used_model = generate_with_fallback(prompt, gemini_key, gemini_model)
-                st.session_state['plan_data'] = json.loads(clean_json_text(raw_text))
-                status.update(label=f"기획 완료! (모델: {used_model})", state="complete", expanded=False)
-                
-            except Exception as e:
-                st.error(f"기획안 생성 실패: {e}")
+            st.session_state['generated_images'] = {} 
+            st.session_state['plan_data'] = generate_plan_gemini(topic, api_key)
+            status.update(label="기획안 작성 완료!", state="complete", expanded=False)
 
-# [단계 2] 기획 내용 표시
+# 화면 표시
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -230,9 +202,8 @@ if st.session_state['plan_data']:
         st.code(plan['visual_style']['character_prompt'], language="text")
     
     st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드 제작")
+    st.subheader(f"🖼️ 비주얼 스토리보드 (현재 모델: {image_model})")
 
-    # [단계 3] 씬별 순차 생성 (Real-time View)
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         
@@ -249,32 +220,28 @@ if st.session_state['plan_data']:
                     st.code(scene['image_prompt'], language="text")
             
             with col_img:
+                # 1. 이미지 표시 (이미 있으면 보여줌)
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
-                    st.success("✅ 생성 완료")
-                
                 else:
-                    # 실시간 생성 과정 보여주기
-                    status_placeholder = st.empty()
-                    img_placeholder = st.empty()
-                    
-                    status_placeholder.info(f"📸 Scene {scene_num} 촬영 중... (AI가 그리는 중)")
-                    
+                    # 없으면 자동 생성 (Turbo는 빠르므로 바로 생성)
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                    
-                    # 서버 사이드 다운로드
-                    img_data = fetch_image_server_side(full_prompt, image_model)
-                    
-                    if img_data:
-                        st.session_state['generated_images'][scene_num] = img_data
-                        status_placeholder.empty()
-                        img_placeholder.image(img_data, use_container_width=True)
-                        time.sleep(0.5) 
-                        st.rerun() # 다음 씬 생성을 위해 리런
-                    else:
-                        status_placeholder.error("이미지 생성 실패")
+                    img_url = get_pollinations_url(full_prompt, image_model)
+                    st.session_state['generated_images'][scene_num] = img_url
+                    st.image(img_url, use_container_width=True)
 
+                # 2. 개별 재생성 버튼 (현재 선택된 모델 적용)
+                if st.button(f"🔄 {image_model} 모델로 다시 그리기", key=f"regen_{scene_num}"):
+                    with st.spinner("📸 다시 촬영 중..."):
+                        full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                        
+                        # [핵심] 현재 사이드바에 선택된 image_model을 사용하여 URL 재생성
+                        new_url = get_pollinations_url(full_prompt, image_model)
+                        
+                        st.session_state['generated_images'][scene_num] = new_url
+                        st.rerun()
+            
             st.markdown("</div>", unsafe_allow_html=True)
 
     if len(st.session_state['generated_images']) == len(plan['scenes']):
-        st.success("✨ 모든 촬영이 종료되었습니다!")
+        st.success("✨ 스토리보드 완성!")

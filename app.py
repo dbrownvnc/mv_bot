@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Exact Replica)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Infinite Retry)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -33,6 +33,7 @@ st.markdown("""
         padding: 10px;
         border-radius: 5px;
         margin-bottom: 10px;
+        border: 1px solid #cce5ff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -57,7 +58,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [수정됨] 첨부파일과 100% 동일한 모델 리스트 (gemini-flash-latest 포함)
     st.subheader("🤖 분석 모델 (DeBrief Engine)")
     model_options = [
         "gemini-1.5-pro", 
@@ -65,7 +65,7 @@ with st.sidebar:
         "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
         "gemini-1.0-pro", 
-        "gemini-flash-latest"  # [확인] 요청하신 모델 포함
+        "gemini-flash-latest"
     ]
     gemini_model = st.selectbox("기본 모델", model_options, index=0)
     
@@ -79,12 +79,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief 엔진 (Exact Ver.) | 실시간 생성 프로세스")
+st.caption("무한 재시도 엔진 탑재 (Never Give Up Mode)")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (첨부파일 generate_with_fallback 완벽 이식)
+# 1. Gemini 로직 (무한 재시도 적용)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -94,54 +94,63 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심] 첨부파일 Line 229 ~ 243 로직 복원 (flash-latest 포함)
 def generate_with_fallback(prompt, api_key, start_model):
+    """
+    쿼터 에러 발생 시 대기 후 재시도하는 강력한 로직
+    """
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델 설정
-    fallback_chain = [start_model]
-    
-    # 2. 첨부파일의 백업 리스트 (gemini-flash-latest 포함 확인)
-    backups = [
+    # 모델 리스트 구성
+    backup_models = [
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
         "gemini-1.0-pro", 
-        "gemini-flash-latest" # [중요] 여기가 핵심입니다.
+        "gemini-flash-latest"
     ]
+    fallback_chain = [start_model] + [m for m in backup_models if m != start_model]
     
-    # 3. 체인 구성 (중복 방지)
-    for b in backups:
-        if b != start_model: 
-            fallback_chain.append(b)
-    
-    last_error = None
     log_placeholder = st.empty()
     
-    # 4. 순차 실행
-    for model_name in fallback_chain:
-        try:
-            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델로 생성 시도 중...</div>", unsafe_allow_html=True)
+    # [핵심] 전체 리스트를 3바퀴까지 돔 (끈질기게 시도)
+    max_global_retries = 3 
+    
+    for attempt in range(max_global_retries):
+        for model_name in fallback_chain:
+            try:
+                msg = f"🔄 <b>{model_name}</b> 연결 시도 중... (Cycle {attempt+1}/{max_global_retries})"
+                log_placeholder.markdown(f"<div class='process-log'>{msg}</div>", unsafe_allow_html=True)
+                
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                
+                # 성공!
+                time.sleep(1)
+                log_placeholder.empty()
+                return response.text, model_name 
+                
+            except Exception as e:
+                error_str = str(e)
+                
+                # 429(Quota) 에러일 경우: 멈추지 않고 '대기' 후 계속 진행
+                if "429" in error_str or "Quota" in error_str:
+                    wait_sec = 10 + (attempt * 5) # 시도할수록 대기시간 늘림 (10초, 15초, 20초...)
+                    log_placeholder.markdown(
+                        f"<div class='process-log' style='color:#d9534f;'>⚠️ 쿼터 초과! {wait_sec}초 식히는 중...</div>", 
+                        unsafe_allow_html=True
+                    )
+                    time.sleep(wait_sec)
+                    continue
+                
+                # 404나 기타 에러: 빠르게 다음 모델로
+                time.sleep(0.5)
+                continue
             
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            
-            time.sleep(1)
-            log_placeholder.empty()
-            
-            return response.text, model_name 
-            
-        except Exception as e:
-            last_error = e
-            # 실패 시 로그 찍고 잠시 대기
-            time.sleep(0.5)
-            continue
-            
-    # 모든 모델 실패 시
-    raise Exception(f"All models failed. Last Error: {last_error}")
+    # 여기까지 왔다면 정말 안 되는 상태
+    raise Exception(f"모든 모델 재시도 실패. API Key 상태를 확인해주세요.")
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (서버 사이드 다운로드 유지)
+# 2. 이미지 생성 로직 (서버 사이드 다운로드)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -172,11 +181,10 @@ if start_btn:
     if not gemini_key or not topic:
         st.warning("API Key와 주제를 입력해주세요.")
     else:
-        # [단계 1] 기획안 생성
         st.session_state['generated_images'] = {} 
         st.session_state['plan_data'] = None
         
-        with st.status("📝 기획안 작성 중...", expanded=True) as status:
+        with st.status("📝 기획안 작성 중... (최대 1~2분 소요될 수 있습니다)", expanded=True) as status:
             prompt = f"""
             You are a professional Music Video Director.
             Analyze the following theme: "{topic}"
@@ -208,15 +216,14 @@ if start_btn:
             """
             
             try:
-                # [수정] 첨부파일과 동일한 함수 호출
                 raw_text, used_model = generate_with_fallback(prompt, gemini_key, gemini_model)
                 st.session_state['plan_data'] = json.loads(clean_json_text(raw_text))
-                status.update(label=f"기획 완료! (모델: {used_model})", state="complete", expanded=False)
+                status.update(label=f"기획 완료! (성공 모델: {used_model})", state="complete", expanded=False)
                 
             except Exception as e:
-                st.error(f"기획안 생성 실패: {e}")
+                st.error(f"기획안 생성 최종 실패: {e}")
 
-# [단계 2] 결과 표시
+# 결과 표시
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -237,7 +244,6 @@ if st.session_state['plan_data']:
     st.markdown("---")
     st.subheader("🖼️ 비주얼 스토리보드 제작")
 
-    # [단계 3] 씬별 순차적 생성
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         

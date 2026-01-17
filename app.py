@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Pure Engine)", layout="wide")
+st.set_page_config(page_title="AI MV Director (v84 Logic)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -48,7 +48,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [설정] 첨부파일 Line 606 모델 리스트 (순서 중요)
+    # [설정] 첨부파일과 동일한 모델 리스트 구성
     st.subheader("🤖 분석 모델")
     model_options = [
         "gemini-1.5-pro", 
@@ -58,12 +58,10 @@ with st.sidebar:
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
-    # 첨부파일 기본값 index=0 (1.5-pro)
     gemini_model = st.selectbox("기본 분석 모델", model_options, index=0)
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
-    # Pollinations Rate Limit 대응을 위해 모델 선택 기능 유지
     image_model = st.selectbox("Pollinations 모델", ["flux", "turbo"], index=0)
 
     if st.button("🗑️ 초기화"):
@@ -72,12 +70,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief Engine Replica (No UI Overhead)")
+st.caption("v84 Engine Replica (Fast Fail & No UI Overhead)")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (app_final_v84.py Line 354 복제)
+# 1. Gemini 로직 (app_final_v84.py의 generate_with_fallback 완벽 복제)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -87,35 +85,47 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [수정 완료] 첨부파일 원본 함수 그대로 사용 (UI 로그 제거)
+# [중요] UI 코드를 싹 빼고, 첨부파일의 순수 로직만 남김
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # Line 356
+    # 1. 시작 모델 설정
     fallback_chain = [start_model]
     
-    # Line 357 (백업 리스트)
-    backups = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
+    # 2. 백업 모델 리스트 (첨부파일과 동일)
+    backups = [
+        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"
+    ]
     
-    # Line 358-359
+    # 3. 체인 구성
     for b in backups:
-        if b != start_model: fallback_chain.append(b)
-        
+        if b != start_model: 
+            fallback_chain.append(b)
+            
     last_error = None
     
-    # Line 361-367 (핵심 로직: UI 업데이트 없이 순수 실행)
+    # 4. 순차 실행 (UI 업데이트 없이 조용하고 빠르게)
     for model_name in fallback_chain:
         try:
+            # st.write(...) 같은 거 절대 넣지 않음 -> 속도 저하 원인
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1) # 성공 시 1초 대기
+            
+            # 성공 시 1초 대기 (첨부파일 로직)
+            time.sleep(1) 
             return response.text, model_name 
+            
         except Exception as e:
             last_error = e
-            time.sleep(0.5) # 실패 시 0.5초 대기
+            # 실패 시 0.5초 대기 후 바로 다음 모델로 (재시도 X)
+            time.sleep(0.5)
             continue
             
-    # Line 368
+    # 다 돌았는데도 안 되면 그때 에러 발생
     raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
@@ -152,16 +162,14 @@ def generate_plan_gemini(topic, api_key, model_name):
         # 폴백 함수 호출
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
         
-        # 성공 시에만 Toast 띄우기 (함수 밖에서 처리하거나 여기서 간단히)
         st.toast(f"✅ 기획 완료 (Used: {used_model})")
-        
         return json.loads(clean_json_text(response_text))
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
         return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (Server-side fetch 유지)
+# 2. 이미지 생성 로직
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -174,7 +182,7 @@ def fetch_image_server_side(prompt, model="flux"):
         if response.status_code == 200:
             return Image.open(BytesIO(response.content))
     except Exception as e:
-        pass
+        pass # 조용히 넘어감
     return None
 
 # ------------------------------------------------------------------
@@ -197,12 +205,13 @@ if start_btn:
         
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
             st.session_state['plan_data'] = generate_plan_gemini(topic, gemini_key, gemini_model)
+            
             if st.session_state['plan_data']:
                 status.update(label="기획 완료!", state="complete", expanded=False)
             else:
                 status.update(label="실패", state="error")
 
-# 결과 표시 및 이미지 순차 생성
+# 결과 표시 및 이미지 생성
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -244,19 +253,19 @@ if st.session_state['plan_data']:
                     st.success("✅ 생성 완료")
                 
                 else:
-                    # 이미지 생성 시각화 (간단한 메시지만)
-                    status_ph = st.empty()
-                    status_ph.info("📸 촬영 중...")
+                    # 간단한 상태 메시지만 표시
+                    msg = st.empty()
+                    msg.info("📸 촬영 중...")
                     
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                     img_data = fetch_image_server_side(full_prompt, image_model)
                     
                     if img_data:
                         st.session_state['generated_images'][scene_num] = img_data
-                        status_ph.empty()
-                        st.rerun() # 즉시 갱신
+                        msg.empty()
+                        st.rerun() # 이미지 나오면 즉시 갱신
                     else:
-                        status_ph.error("이미지 생성 실패 (서버 혼잡)")
+                        msg.error("이미지 생성 실패")
 
             st.markdown("</div>", unsafe_allow_html=True)
     

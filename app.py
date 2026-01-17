@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (HF)", layout="wide")
+st.set_page_config(page_title="AI MV Director (HF Secrets)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -32,32 +32,45 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- API 키 로드 ---
+# --- [핵심] API 키 로드 함수 (Secrets 우선) ---
 def get_api_key(key_name):
-    if key_name in st.secrets:
-        return st.secrets[key_name]
-    elif os.getenv(key_name):
+    """
+    1순위: Streamlit Secrets (로컬 .streamlit/secrets.toml 또는 Cloud 배포 환경)
+    2순위: 시스템 환경변수 (OS Environment Variable)
+    3순위: 없음 (None 반환 -> 수동 입력 유도)
+    """
+    try:
+        if key_name in st.secrets:
+            return st.secrets[key_name]
+    except FileNotFoundError:
+        pass # 로컬에 secrets.toml이 없는 경우 무시
+        
+    if os.getenv(key_name):
         return os.getenv(key_name)
     return None
 
 # --- 사이드바 ---
 with st.sidebar:
-    st.header("⚙️ 설정 (Hugging Face)")
+    st.header("⚙️ 설정 (Secrets 모드)")
     
-    # 1. Google Gemini Key
+    # 1. Google Gemini Key 로드
     gemini_key = get_api_key("GOOGLE_API_KEY")
+    
     if gemini_key:
-        st.success("✅ Gemini Key 연결됨")
+        st.success("✅ Gemini Key 로드 완료 (Secrets)")
     else:
+        st.warning("Gemini Key가 없습니다.")
         gemini_key = st.text_input("Google Gemini API Key", type="password")
     
     st.markdown("---")
     
-    # 2. [NEW] Hugging Face Token 입력
+    # 2. [핵심] Hugging Face Token 로드
     hf_token = get_api_key("HF_TOKEN")
+    
     if hf_token:
-        st.success("✅ Hugging Face Token 연결됨")
+        st.success("✅ HF Token 로드 완료 (Secrets)")
     else:
+        st.warning("HF Token이 없습니다.")
         hf_token = st.text_input("Hugging Face Access Token", type="password", help="Hugging Face 설정에서 'Write' 권한으로 발급받으세요.")
         st.markdown("[👉 토큰 발급받기 (무료)](https://huggingface.co/settings/tokens)")
 
@@ -82,12 +95,12 @@ with st.sidebar:
         st.rerun()
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (Hugging Face Edition)")
-st.subheader("끊김 없는 고화질 스토리보드 제작")
+st.title("🎬 AI MV Director (HF Secrets)")
+st.subheader("Secrets 연동으로 더 간편해진 고화질 스토리보드")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# --- Gemini 로직 (문제없는 기존 버전 유지) ---
+# --- Gemini 로직 ---
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -151,38 +164,29 @@ def generate_plan_gemini(topic, api_key):
         st.error(f"기획안 오류: {e}")
         return None
 
-# --- [핵심] Hugging Face 이미지 생성 함수 ---
+# --- Hugging Face 이미지 생성 함수 ---
 def generate_image_hf(prompt, token, model_id):
-    """
-    Hugging Face Inference API를 사용하여 이미지를 생성합니다.
-    모델 로딩 중(503 에러)일 경우 자동으로 대기 후 재시도합니다.
-    """
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {token}"}
     
-    # 랜덤 시드 추가 (매번 다른 이미지 생성 유도)
     seed = random.randint(0, 999999) 
     
-    # payload 설정 (Flux 모델은 inputs 파라미터를 씁니다)
     payload = {
         "inputs": f"{prompt}, high quality, cinematic lighting, 8k",
-        "parameters": {"seed": seed} # 시드 적용
+        "parameters": {"seed": seed} 
     }
 
-    # 최대 5번 재시도 (모델이 'Cold Boot' 상태일 때 깨우기 위함)
     for attempt in range(5):
         try:
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
             
-            # 1. 성공 시 이미지 반환
             if response.status_code == 200:
                 return Image.open(BytesIO(response.content))
             
-            # 2. 모델 로딩 중 (503) -> 대기 후 재시도
             elif "estimated_time" in response.json():
                 wait_time = response.json().get("estimated_time", 10)
                 st.toast(f"😴 모델 깨우는 중... ({wait_time:.1f}초 대기)")
-                time.sleep(wait_time + 1) # 안전하게 1초 더 대기
+                time.sleep(wait_time + 1)
                 continue
                 
             else:
@@ -208,7 +212,7 @@ if start_btn:
     if not gemini_key or not topic:
         st.warning("Google API Key와 주제를 입력해주세요.")
     elif not hf_token:
-        st.warning("Hugging Face Token이 필요합니다. 사이드바에서 입력해주세요.")
+        st.warning("Hugging Face Token이 없습니다 (Secrets 확인 필요).")
     else:
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
             st.session_state['generated_images'] = {} 
@@ -252,27 +256,22 @@ if st.session_state['plan_data']:
                     st.code(scene['image_prompt'], language="text")
             
             with col_img:
-                # 1. 이미지가 있으면 표시
                 if scene_num in st.session_state['generated_images']:
                     st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
                 else:
-                    # 2. 없으면 Hugging Face 생성 시도
                     if hf_token:
                         with st.spinner(f"📸 Hugging Face에서 생성 중... ({hf_model_id})"):
                              full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                             
-                             # [핵심] HF API 호출
                              img_data = generate_image_hf(full_prompt, hf_token, hf_model_id)
                              
                              if img_data:
                                  st.session_state['generated_images'][scene_num] = img_data
                                  st.image(img_data, use_container_width=True)
                              else:
-                                 st.error("이미지 생성 실패. 토큰 권한이나 모델 상태를 확인하세요.")
+                                 st.error("이미지 생성 실패.")
                     else:
-                        st.warning("Hugging Face Token을 입력해야 이미지가 보입니다.")
+                        st.warning("토큰이 필요합니다.")
 
-                # 3. 개별 재생성 버튼
                 if st.button(f"🔄 다시 그리기", key=f"regen_{scene_num}"):
                      if hf_token:
                         with st.spinner("📸 재촬영 중..."):
@@ -282,8 +281,6 @@ if st.session_state['plan_data']:
                             if img_data:
                                 st.session_state['generated_images'][scene_num] = img_data
                                 st.rerun()
-                     else:
-                         st.error("Token이 필요합니다.")
             
             st.markdown("</div>", unsafe_allow_html=True)
 

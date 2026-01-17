@@ -11,9 +11,9 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Exact Replica)", layout="wide")
+st.set_page_config(page_title="AI MV Director (V84 Engine)", layout="wide")
 
-# --- 스타일링 ---
+# --- 스타일링 (UI 간섭 최소화) ---
 st.markdown("""
 <style>
     .scene-box {
@@ -28,20 +28,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- [핵심] API 키 로드 (모든 케이스 대응) ---
+# --- API 키 로드 ---
 def get_api_key():
-    # 1. Secrets에서 찾기
-    if "GOOGLE_API_KEY" in st.secrets:
-        return st.secrets["GOOGLE_API_KEY"]
-    if "GEMINI_API_KEY" in st.secrets:
-        return st.secrets["GEMINI_API_KEY"]
-    
-    # 2. 환경변수에서 찾기
-    if os.getenv("GOOGLE_API_KEY"):
-        return os.getenv("GOOGLE_API_KEY")
-    if os.getenv("GEMINI_API_KEY"):
-        return os.getenv("GEMINI_API_KEY")
-        
+    # Secrets 및 환경변수 모두 체크
+    if "GOOGLE_API_KEY" in st.secrets: return st.secrets["GOOGLE_API_KEY"]
+    if "GEMINI_API_KEY" in st.secrets: return st.secrets["GEMINI_API_KEY"]
+    if os.getenv("GOOGLE_API_KEY"): return os.getenv("GOOGLE_API_KEY")
+    if os.getenv("GEMINI_API_KEY"): return os.getenv("GEMINI_API_KEY")
     return None
 
 # --- 사이드바 ---
@@ -50,22 +43,22 @@ with st.sidebar:
     
     gemini_key = get_api_key()
     if gemini_key:
-        st.success("✅ Gemini Key 자동 연결됨")
+        st.success("✅ Gemini Key 연결됨")
     else:
         gemini_key = st.text_input("Gemini API Key", type="password")
     
     st.markdown("---")
     
-    # [수정됨] 첨부파일과 100% 동일한 모델 리스트 (gemini-flash-latest 포함)
-    st.subheader("🤖 분석 모델 (DeBrief Engine)")
+    # [핵심 1] 첨부파일 V84의 검증된 모델 리스트 (2.5 같은 위험 모델 제외)
+    st.subheader("🤖 분석 모델 (V84 Engine)")
     model_options = [
-        "gemini-1.5-pro", 
+        "gemini-1.5-flash",        # [추천] 쿼터 벙커 (가장 안전)
         "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"  # [확인] 누락되었던 모델 추가 완료
+        "gemini-1.5-pro", 
+        "gemini-1.0-pro",
+        "gemini-flash-latest"
     ]
+    # 쿼터 문제 해결을 위해 1.5-flash를 기본값(index=0)으로 설정
     gemini_model = st.selectbox("기본 모델", model_options, index=0)
     
     st.markdown("---")
@@ -78,12 +71,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief Engine Replica | Direct API Connection")
+st.caption("V84 Logic Implementation | Quota-Safe Mode")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (첨부파일 generate_with_fallback 완벽 이식)
+# 1. Gemini 로직 (V84 핵심: 순수 파이썬 루프 + 즉시 전환)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -93,41 +86,43 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심] 첨부파일 Line 229 ~ 243 로직 복원 (flash-latest 포함)
+# [핵심 2] UI 코드 없는 순수 로직 함수
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델 설정
+    # 1. 시작 모델
     fallback_chain = [start_model]
     
-    # 2. 첨부파일의 백업 리스트 (gemini-flash-latest 포함 확인)
+    # 2. 백업 리스트 (V84와 동일 구성 - 쿼터 벙커 포함)
     backups = [
+        "gemini-1.5-flash",        # 쿼터 대장 (1500 RPM)
         "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
         "gemini-1.0-pro", 
-        "gemini-flash-latest" # [중요] 여기가 핵심입니다.
+        "gemini-flash-latest"
     ]
     
-    # 3. 체인 구성 (중복 방지)
+    # 중복 제거하며 체인 연결
     for b in backups:
         if b != start_model: 
             fallback_chain.append(b)
-    
+            
     last_error = None
     
-    # 4. 순차 실행 (UI 로그 없이 조용하고 빠르게)
+    # [핵심 3] 루프 내 UI 업데이트 금지 & 에러 시 즉시 continue
     for model_name in fallback_chain:
         try:
+            # 순수 API 호출만 수행
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            time.sleep(1) # 성공 시 1초 대기
+            # 성공 시 1초 대기 (안정성)
+            time.sleep(1) 
             return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 실패 시 0.5초 대기 후 다음 모델
+            # 실패 시 미련 없이 0.5초 뒤 다음 모델로
             time.sleep(0.5)
             continue
             
@@ -165,7 +160,10 @@ def generate_plan_gemini(topic, api_key, model_name):
           ]
         }}
         """
+        # 함수 실행 (UI 밖에서)
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
+        
+        # 성공 후에만 UI 업데이트
         st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
         return json.loads(clean_json_text(response_text))
     except Exception as e:
@@ -173,7 +171,7 @@ def generate_plan_gemini(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (Server-side fetch 유지)
+# 2. 이미지 생성 로직 (Server-side fetch)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -215,7 +213,6 @@ if start_btn:
             else:
                 status.update(label="실패", state="error")
 
-# 결과 표시 및 이미지 생성
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     

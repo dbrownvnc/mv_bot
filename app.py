@@ -1,4 +1,5 @@
 import streamlit as st
+import google.generativeai as genai
 import os
 import json
 import re
@@ -10,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Direct API)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Exact Replica)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -27,12 +28,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- [핵심 1] API 키 로드 (모든 가능성 체크) ---
+# --- [핵심] API 키 로드 (모든 케이스 대응) ---
 def get_api_key():
-    # 1. Secrets에서 찾기 (여러 이름 시도)
+    # 1. Secrets에서 찾기
     if "GOOGLE_API_KEY" in st.secrets:
         return st.secrets["GOOGLE_API_KEY"]
-    if "GEMINI_API_KEY" in st.secrets:  # 사용자님 케이스
+    if "GEMINI_API_KEY" in st.secrets:
         return st.secrets["GEMINI_API_KEY"]
     
     # 2. 환경변수에서 찾기
@@ -55,15 +56,17 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 모델 선택
-    st.subheader("🤖 분석 모델")
+    # [수정됨] 첨부파일과 100% 동일한 모델 리스트 (gemini-flash-latest 포함)
+    st.subheader("🤖 분석 모델 (DeBrief Engine)")
     model_options = [
         "gemini-1.5-pro", 
+        "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash", 
-        "gemini-1.0-pro",
-        "gemini-2.0-flash-exp" # 최신은 이름이 자주 바뀌므로 주의
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"  # [확인] 누락되었던 모델 추가 완료
     ]
-    gemini_model = st.selectbox("기본 모델", model_options, index=1) # 1.5-flash 안전빵
+    gemini_model = st.selectbox("기본 모델", model_options, index=0)
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
@@ -75,48 +78,13 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("Direct API Mode (Library-Free) | No 404/429 Issues")
+st.caption("DeBrief Engine Replica | Direct API Connection")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (Direct HTTP Request)
+# 1. Gemini 로직 (첨부파일 generate_with_fallback 완벽 이식)
 # ------------------------------------------------------------------
-# 라이브러리 없이 직접 구글 서버에 요청을 보냅니다. 훨씬 안정적입니다.
-
-def call_gemini_api(prompt, api_key, model="gemini-1.5-flash"):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    
-    headers = {'Content-Type': 'application/json'}
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 2000
-        }
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        
-        # 200 OK
-        if response.status_code == 200:
-            result = response.json()
-            # 응답 파싱
-            try:
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                return text, None # 성공
-            except:
-                return None, "응답 형식 오류"
-                
-        # 에러 처리
-        else:
-            return None, f"Error {response.status_code}: {response.text}"
-            
-    except Exception as e:
-        return None, str(e)
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -125,59 +93,87 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-def generate_plan_gemini(topic, api_key, start_model):
-    prompt = f"""
-    You are a professional Music Video Director.
-    Analyze the following theme: "{topic}"
-    Create a detailed plan in JSON format ONLY.
+# [핵심] 첨부파일 Line 229 ~ 243 로직 복원 (flash-latest 포함)
+def generate_with_fallback(prompt, api_key, start_model):
+    genai.configure(api_key=api_key)
     
-    JSON Structure:
-    {{
-      "project_title": "Creative Title (Korean)",
-      "logline": "One sentence concept (Korean)",
-      "music": {{
-        "style": "Genre and Mood (Korean)",
-        "suno_prompt": "English prompt for music AI."
-      }},
-      "visual_style": {{
-        "description": "Visual tone (Korean)",
-        "character_prompt": "English description of the main character."
-      }},
-      "scenes": [
-        {{
-          "scene_num": 1,
-          "timecode": "00:00-00:05",
-          "action": "Scene description (Korean)",
-          "camera": "Shot type (Korean)",
-          "image_prompt": "Highly detailed English prompt for image generation."
-        }}
-        // Create 4 scenes total
-      ]
-    }}
-    """
+    # 1. 시작 모델 설정
+    fallback_chain = [start_model]
     
-    # 1. 선택된 모델 시도
-    text, error = call_gemini_api(prompt, api_key, start_model)
-    if text: 
-        st.toast(f"✅ 기획 완료 ({start_model})")
-        return json.loads(clean_json_text(text))
+    # 2. 첨부파일의 백업 리스트 (gemini-flash-latest 포함 확인)
+    backups = [
+        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest" # [중요] 여기가 핵심입니다.
+    ]
     
-    # 2. 실패 시 백업 모델 (1.5-flash -> 1.0-pro)
-    backups = ["gemini-1.5-flash", "gemini-1.0-pro"]
-    for model in backups:
-        if model == start_model: continue
-        
-        time.sleep(1) # 잠시 대기
-        text, error = call_gemini_api(prompt, api_key, model)
-        if text:
-            st.toast(f"✅ 기획 완료 (Backup: {model})")
-            return json.loads(clean_json_text(text))
+    # 3. 체인 구성 (중복 방지)
+    for b in backups:
+        if b != start_model: 
+            fallback_chain.append(b)
+    
+    last_error = None
+    
+    # 4. 순차 실행 (UI 로그 없이 조용하고 빠르게)
+    for model_name in fallback_chain:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
             
-    st.error(f"모든 모델 실패. Last Error: {error}")
-    return None
+            time.sleep(1) # 성공 시 1초 대기
+            return response.text, model_name 
+            
+        except Exception as e:
+            last_error = e
+            # 실패 시 0.5초 대기 후 다음 모델
+            time.sleep(0.5)
+            continue
+            
+    # 모든 모델 실패 시
+    raise Exception(f"All models failed. Last Error: {last_error}")
+
+def generate_plan_gemini(topic, api_key, model_name):
+    try:
+        prompt = f"""
+        You are a professional Music Video Director.
+        Analyze the following theme: "{topic}"
+        Create a detailed plan in JSON format ONLY.
+        
+        JSON Structure:
+        {{
+          "project_title": "Creative Title (Korean)",
+          "logline": "One sentence concept (Korean)",
+          "music": {{
+            "style": "Genre and Mood (Korean)",
+            "suno_prompt": "English prompt for music AI."
+          }},
+          "visual_style": {{
+            "description": "Visual tone (Korean)",
+            "character_prompt": "English description of the main character."
+          }},
+          "scenes": [
+            {{
+              "scene_num": 1,
+              "timecode": "00:00-00:05",
+              "action": "Scene description (Korean)",
+              "camera": "Shot type (Korean)",
+              "image_prompt": "Highly detailed English prompt for image generation."
+            }}
+            // Create 4 scenes total
+          ]
+        }}
+        """
+        response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
+        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
+        return json.loads(clean_json_text(response_text))
+    except Exception as e:
+        st.error(f"기획안 생성 실패: {e}")
+        return None
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직
+# 2. 이미지 생성 로직 (Server-side fetch 유지)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -219,6 +215,7 @@ if start_btn:
             else:
                 status.update(label="실패", state="error")
 
+# 결과 표시 및 이미지 생성
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     

@@ -74,40 +74,49 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심 수정] DeBrief 앱의 폴백 로직 + 최신 모델 리스트 적용
-def generate_with_fallback(prompt, api_key):
+# [핵심] DeBrief(app_final_v84.py)의 강력한 폴백 함수 이식
+def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     genai.configure(api_key=api_key)
     
-    # 2025-2026년 기준 가장 안정적인 모델 리스트 (구버전 1.0 제거)
-    models_to_try = [
-        "gemini-1.5-flash",        # [1순위] 속도 빠름, 무료 티어에서 가장 안정적
-        "gemini-1.5-pro",          # [2순위] 고성능, Flash 실패 시 시도
-        "gemini-1.5-flash-8b",     # [3순위] 초경량 모델
-        "gemini-1.5-flash-latest", # [4순위] 최신 별칭
+    fallback_chain = [start_model]
+    
+    # DeBrief 앱에서 사용된 백업 리스트 (그대로 적용)
+    # 최신 프리뷰 모델부터 경량화 모델까지 다양하게 포진되어 있어 성공률이 높음
+    backups = [
+        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-8b", 
+        "gemini-1.0-pro", 
+        "gemini-flash-latest"
     ]
+    
+    # 시작 모델과 중복되지 않게 체인 구성
+    for b in backups:
+        if b != start_model: fallback_chain.append(b)
     
     last_error = None
     
-    for model_name in models_to_try:
+    for model_name in fallback_chain:
         try:
-            # 모델 초기화 및 생성 시도
+            # 모델 생성 및 호출
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1) # API 과부하 방지 (DeBrief 스타일)
-            return response.text
+            time.sleep(1)  # 성공 시 1초 대기 (안정성 확보)
+            
+            # 텍스트와 성공한 모델명 반환 (DeBrief 방식)
+            return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 에러 발생 시(404 등) 멈추지 않고 즉시 다음 모델 시도
-            # st.toast(f"⚠️ {model_name} 실패, 다음 모델 시도...") # 디버깅용 (필요시 주석 해제)
+            # 실패 시 0.5초 대기 후 다음 모델 시도
             time.sleep(0.5)
             continue
             
-    # 모든 모델이 실패했을 때만 에러 발생
-    raise Exception(f"모든 모델 시도 실패. (API Key를 확인해주세요)\n마지막 에러: {last_error}")
+    # 모든 모델 실패 시
+    raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key):
-    """Gemini로 기획안 생성 (Fallback 적용)"""
+    """Gemini로 기획안 생성"""
     try:
         prompt = f"""
         You are a professional Music Video Director.
@@ -140,8 +149,11 @@ def generate_plan_gemini(topic, api_key):
         }}
         """
         
-        # Fallback 함수 호출
-        response_text = generate_with_fallback(prompt, api_key)
+        # [수정] DeBrief 방식 호출: 튜플(텍스트, 모델명) 반환 처리
+        response_text, used_model = generate_with_fallback(prompt, api_key, "gemini-1.5-flash")
+        
+        # 성공 시 어떤 모델이 쓰였는지 토스트 메시지로 확인 가능 (디버깅용)
+        # st.toast(f"✅ 사용된 모델: {used_model}") 
         
         json_str = clean_json_text(response_text)
         return json.loads(json_str)

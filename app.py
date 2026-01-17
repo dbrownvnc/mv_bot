@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Exact Replica)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Free Tier Optimized)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -22,7 +22,7 @@ st.markdown("""
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border-left: 6px solid #4285F4;
+        border-left: 6px solid #34A853; /* Google Green */
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     .process-log {
@@ -49,7 +49,6 @@ def get_api_key(key_name):
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    # Gemini Key
     gemini_key = get_api_key("GOOGLE_API_KEY")
     if gemini_key:
         st.success("✅ Gemini Key 연결됨")
@@ -58,17 +57,18 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [핵심] 첨부파일 Line 446과 100% 동일한 모델 리스트
-    st.subheader("🤖 분석 모델 (DeBrief Engine)")
+    # [전략 수정] 무료 사용자에게 가장 유리한 모델을 기본값으로 설정
+    st.subheader("🤖 분석 모델")
+    st.caption("무료 계정 최적화 순서입니다.")
+    
     model_options = [
-        "gemini-1.5-pro", 
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
+        "gemini-1.5-flash",        # [1순위] 하루 1500회 무료 (절대 안 막힘)
+        "gemini-2.0-flash-lite-preview-02-05", # [2순위] 성능 좋음 (하루 50회 제한)
+        "gemini-1.5-flash-8b",     # [3순위] 초경량
+        "gemini-1.5-pro",          # [4순위] 고성능 (제한 심함)
+        "gemini-1.0-pro"           # [5순위] 구버전
     ]
-    gemini_model = st.selectbox("기본 모델", model_options, index=0) # 기본값: 1.5-pro
+    gemini_model = st.selectbox("우선 사용 모델", model_options, index=0)
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
@@ -80,12 +80,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("DeBrief 엔진 (Exact Ver.) | 실시간 생성 프로세스")
+st.caption("무료 계정 최적화 엔진 | 실시간 생성 프로세스")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (첨부파일 generate_with_fallback 완벽 이식)
+# 1. Gemini 로직 (DeBrief 로직 + 무료 계정 최적화)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -95,54 +95,49 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-# [핵심] 첨부파일 Line 229 ~ 243 로직 복원
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 시작 모델 설정
-    fallback_chain = [start_model]
-    
-    # 2. 첨부파일 Line 232의 backups 리스트 (정확히 일치시킴)
-    backups = [
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
+    # [전략] 사용자가 선택한 모델을 1순위로 하되,
+    # 나머지는 '실패 확률이 낮은 순서'로 배치하여 생존율을 높임
+    backup_models = [
+        "gemini-1.5-flash",        # 구원투수 1위
+        "gemini-1.5-flash-8b",     # 구원투수 2위
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
     ]
     
-    # 3. 체인 구성 (중복 방지)
-    for b in backups:
-        if b != start_model: 
+    fallback_chain = [start_model]
+    for b in backup_models:
+        if b != start_model:
             fallback_chain.append(b)
     
     last_error = None
-    log_placeholder = st.empty() # 진행 상황 표시용 (UI 추가)
+    log_placeholder = st.empty()
     
-    # 4. 순차 실행
     for model_name in fallback_chain:
         try:
-            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델로 생성 시도 중...</div>", unsafe_allow_html=True)
+            log_placeholder.markdown(f"<div class='process-log'>🔄 {model_name} 모델 연결 시도...</div>", unsafe_allow_html=True)
             
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            time.sleep(1) # 첨부파일 Line 237 (1초 대기)
-            log_placeholder.empty()
-            
+            time.sleep(1) 
+            log_placeholder.empty() # 성공 시 로그 삭제
             return response.text, model_name 
             
         except Exception as e:
             last_error = e
-            # 실패 시 로그 찍고 잠시 대기
-            time.sleep(0.5) # 첨부파일 Line 241 (0.5초 대기)
+            # 429(Quota) 에러면 콘솔에만 출력하고 빠르게 다음으로
+            # 404(Model not found)도 마찬가지
+            time.sleep(0.5) 
             continue
             
-    # 모든 모델 실패 시
-    raise Exception(f"All models failed. Last Error: {last_error}")
+    raise Exception(f"모든 모델 연결 실패. (API Key 상태를 확인해주세요) Last Error: {last_error}")
 
 # ------------------------------------------------------------------
-# 2. 이미지 생성 로직 (서버 사이드 다운로드 유지)
+# 2. 이미지 생성 로직 (서버 사이드 다운로드)
 # ------------------------------------------------------------------
 
 def fetch_image_server_side(prompt, model="flux"):
@@ -159,7 +154,7 @@ def fetch_image_server_side(prompt, model="flux"):
     return None
 
 # ------------------------------------------------------------------
-# 3. 실행 로직
+# 3. 실행 로직 (실시간 시각화)
 # ------------------------------------------------------------------
 
 if 'plan_data' not in st.session_state:
@@ -209,7 +204,6 @@ if start_btn:
             """
             
             try:
-                # [수정] 첨부파일과 동일한 함수 호출
                 raw_text, used_model = generate_with_fallback(prompt, gemini_key, gemini_model)
                 st.session_state['plan_data'] = json.loads(clean_json_text(raw_text))
                 status.update(label=f"기획 완료! (모델: {used_model})", state="complete", expanded=False)
@@ -217,7 +211,7 @@ if start_btn:
             except Exception as e:
                 st.error(f"기획안 생성 실패: {e}")
 
-# [단계 2] 결과 표시
+# [단계 2] 기획 내용 표시
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
@@ -238,7 +232,7 @@ if st.session_state['plan_data']:
     st.markdown("---")
     st.subheader("🖼️ 비주얼 스토리보드 제작")
 
-    # [단계 3] 씬별 순차적 생성
+    # [단계 3] 씬별 순차 생성 (Real-time View)
     for scene in plan['scenes']:
         scene_num = scene['scene_num']
         
@@ -260,14 +254,15 @@ if st.session_state['plan_data']:
                     st.success("✅ 생성 완료")
                 
                 else:
-                    img_placeholder = st.empty()
+                    # 실시간 생성 과정 보여주기
                     status_placeholder = st.empty()
+                    img_placeholder = st.empty()
                     
                     status_placeholder.info(f"📸 Scene {scene_num} 촬영 중... (AI가 그리는 중)")
                     
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                     
-                    # 이미지 생성
+                    # 서버 사이드 다운로드
                     img_data = fetch_image_server_side(full_prompt, image_model)
                     
                     if img_data:
@@ -275,7 +270,7 @@ if st.session_state['plan_data']:
                         status_placeholder.empty()
                         img_placeholder.image(img_data, use_container_width=True)
                         time.sleep(0.5) 
-                        st.rerun()
+                        st.rerun() # 다음 씬 생성을 위해 리런
                     else:
                         status_placeholder.error("이미지 생성 실패")
 

@@ -25,15 +25,9 @@ st.markdown("""
         border-left: 6px solid #4285F4;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .diagnostic-box {
-        background-color: #f0f2f6;
-        padding: 15px;
-        border-radius: 8px;
-        font-family: monospace;
-        font-size: 0.85em;
-        margin-bottom: 20px;
-        border: 1px solid #ccc;
-    }
+    .status-ok { color: green; font-weight: bold; }
+    .status-err { color: red; font-weight: bold; }
+    .status-warn { color: orange; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,55 +51,57 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [NEW] API 키 진단 도구
-    st.subheader("🛠️ 문제 해결 도구")
-    if st.button("🔑 API 키 진단 및 테스트"):
-        if not gemini_key:
-            st.error("API Key를 먼저 입력하세요.")
-        else:
-            try:
-                genai.configure(api_key=gemini_key)
-                # 1. 모델 리스트 조회
-                st.write("📡 Google 서버 접속 중...")
-                models = list(genai.list_models())
-                
-                # 'generateContent' 기능을 지원하는 모델만 필터링
-                available_models = []
-                for m in models:
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                
-                if available_models:
-                    st.success("✅ API Key 유효함 (접속 성공)")
-                    st.markdown("⬇️ **내 키로 사용 가능한 모델 목록:**")
-                    st.code("\n".join(available_models))
-                    
-                    # 2. 간단한 테스트 생성
-                    test_model = available_models[0]
-                    st.write(f"🧪 '{test_model}' 모델로 테스트 생성 시도...")
-                    m = genai.GenerativeModel(test_model)
-                    res = m.generate_content("Hello, AI.")
-                    st.info(f"응답 성공: {res.text}")
-                else:
-                    st.warning("⚠️ 접속은 됐는데, 텍스트 생성 가능한 모델이 없습니다. (권한 문제)")
-                    
-            except Exception as e:
-                st.error(f"❌ API Key 문제 발생:\n{e}")
-                st.caption("Tip: 키가 만료되었거나, 'Generative Language API'가 활성화되지 않았을 수 있습니다.")
-
-    st.markdown("---")
+    # [핵심 기능] 모델 정밀 진단 도구
+    st.subheader("🏥 시스템 상태 확인")
     
-    # 모델 선택 (진단 결과에 따라 유연하게 선택 가능)
-    st.subheader("🤖 분석 모델")
-    model_options = [
-        "gemini-1.5-pro", 
+    # 우리가 사용할 후보 모델 리스트
+    target_models = [
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
+        "gemini-1.5-pro", 
+        "gemini-1.0-pro",
         "gemini-flash-latest"
     ]
-    gemini_model = st.selectbox("기본 분석 모델", model_options, index=2) # 1.5-flash 기본
+    
+    if st.button("🧪 모델 정밀 진단 (생존 확인)"):
+        if not gemini_key:
+            st.error("API Key를 입력하세요.")
+        else:
+            genai.configure(api_key=gemini_key)
+            st.write("🔍 각 모델을 테스트 중입니다...")
+            
+            valid_model_found = False
+            
+            # 각 모델을 순회하며 실제 요청을 보내봄
+            for m in target_models:
+                try:
+                    # 토큰 1개짜리 초경량 요청 보내기 (비용 절감)
+                    model = genai.GenerativeModel(m)
+                    response = model.generate_content("Hi", generation_config={"max_output_tokens": 1})
+                    
+                    st.markdown(f"✅ **{m}**: <span class='status-ok'>사용 가능 (OK)</span>", unsafe_allow_html=True)
+                    valid_model_found = True
+                    
+                except Exception as e:
+                    err_msg = str(e)
+                    if "429" in err_msg or "Quota" in err_msg:
+                        st.markdown(f"⚠️ **{m}**: <span class='status-warn'>한도 초과 (429)</span>", unsafe_allow_html=True)
+                    elif "404" in err_msg or "Not Found" in err_msg:
+                        st.markdown(f"❌ **{m}**: <span class='status-err'>모델 없음 (404)</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"❌ **{m}**: <span class='status-err'>에러 ({err_msg[:30]}...)</span>", unsafe_allow_html=True)
+            
+            if not valid_model_found:
+                st.error("🚨 사용 가능한 모델이 하나도 없습니다! API Key를 새로 발급받거나 다른 구글 계정을 사용하세요.")
+            else:
+                st.success("진단 완료. '사용 가능' 뜬 모델이 자동으로 우선 사용됩니다.")
+
+    st.markdown("---")
+    
+    # 모델 선택 (진단 결과 참고용)
+    st.subheader("🤖 분석 모델")
+    gemini_model = st.selectbox("기본 분석 모델", target_models, index=1) # 1.5-flash 기본
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
@@ -117,12 +113,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("System Diagnostic Mode | Smart Fallback")
+st.caption("System Diagnostic Mode | Real-time Status Check")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (스마트 폴백 - 진단 결과 반영 가능)
+# 1. Gemini 로직 (진단 기반 폴백 시스템)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -135,22 +131,23 @@ def clean_json_text(text):
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 1. 우선순위 리스트 구성
-    fallback_chain = [start_model]
+    # 진단 리스트와 동일한 백업 구성
     backups = [
-        "gemini-1.5-flash",        # 가장 안전
         "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-1.5-flash", 
         "gemini-1.5-flash-8b", 
+        "gemini-1.5-pro", 
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
     
+    # 선택한 모델을 맨 앞으로, 나머지는 뒤로
+    fallback_chain = [start_model]
     for b in backups:
         if b != start_model: fallback_chain.append(b)
             
     last_error = None
     
-    # 2. 순차 실행 (UI 간섭 없이 빠름)
     for model_name in fallback_chain:
         try:
             model = genai.GenerativeModel(model_name)
@@ -160,25 +157,11 @@ def generate_with_fallback(prompt, api_key, start_model):
             
         except Exception as e:
             last_error = e
-            # 404(모델 없음)나 400(Bad Request)는 즉시 다음으로
-            # 429(Quota)는 어쩔 수 없이 넘김 (대기해도 무료 티어는 바로 안 풀림)
+            # 실패 시 빠르게 스킵
             time.sleep(0.5)
             continue
-    
-    # [최후의 수단] 하드코딩 모델이 다 실패하면, '사용 가능한 모델'을 동적으로 찾아서 시도
-    try:
-        print("하드코딩 모델 실패. 동적 모델 탐색 시도...")
-        all_models = genai.list_models()
-        for m in all_models:
-            if 'generateContent' in m.supported_generation_methods:
-                # 찾은 모델로 마지막 시도
-                model = genai.GenerativeModel(m.name)
-                response = model.generate_content(prompt)
-                return response.text, m.name
-    except:
-        pass
-
-    raise Exception(f"모든 모델 실패. (API Key 권한을 확인하세요). Last Error: {last_error}")
+            
+    raise Exception(f"All models failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
     try:
@@ -212,7 +195,7 @@ def generate_plan_gemini(topic, api_key, model_name):
         }}
         """
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
+        st.toast(f"✅ 기획 완료 (Used: {used_model})")
         return json.loads(clean_json_text(response_text))
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")

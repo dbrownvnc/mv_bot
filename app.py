@@ -5,13 +5,14 @@ import json
 import re
 import urllib.parse
 import time
-import random  # [추가] 랜덤 시드 생성을 위해 필요
+import random
+import requests # [추가] 이미지 다운로드 확인용
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="AI MV Director (Free)", layout="wide")
 
 # --- 스타일링 ---
-st.markdown("""ㅁㅁ
+st.markdown("""
 <style>
     .scene-box {
         background-color: #f0f2f6;
@@ -27,15 +28,16 @@ st.markdown("""ㅁㅁ
         font-family: monospace;
         font-size: 0.85em;
     }
+    img {
+        border-radius: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- API 키 로드 함수 ---
 def get_api_key():
-    # 1. Streamlit Cloud Secrets에서 확인
     if "GOOGLE_API_KEY" in st.secrets:
         return st.secrets["GOOGLE_API_KEY"]
-    # 2. 환경변수에서 확인
     elif os.getenv("GOOGLE_API_KEY"):
         return os.getenv("GOOGLE_API_KEY")
     return None
@@ -44,19 +46,20 @@ def get_api_key():
 with st.sidebar:
     st.header("⚙️ 설정 (Free Edition)")
     
-    # API 키 상태 확인
     loaded_key = get_api_key()
-    
     if loaded_key:
-        st.success("✅ API Key가 연결되었습니다.")
+        st.success("✅ API Key 연결됨")
         api_key = loaded_key
     else:
-        st.warning("API Key가 없습니다.")
+        st.warning("API Key 없음")
         api_key = st.text_input("Google Gemini API Key", type="password")
         st.caption("Google AI Studio에서 무료로 발급받으세요.")
     
     st.markdown("---")
-    st.info("이미지 생성: Pollinations.ai (Flux Model, 무료)")
+    st.subheader("🖼️ 이미지 설정")
+    # [추가] 모델 선택 옵션 (실패 시 Turbo 권장)
+    use_turbo = st.checkbox("🚀 고속 모드 (Turbo)", value=False, help="이미지 생성이 자꾸 실패하면 이 옵션을 켜세요.")
+    st.info("Pollinations.ai (무료) 사용 중")
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director (Gemini Edition)")
@@ -68,30 +71,23 @@ topic = st.text_area("영상 주제 입력", height=80,
 # --- 헬퍼 함수 ---
 
 def clean_json_text(text):
-    """Gemini 응답에서 JSON만 추출"""
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match: return match.group(1)
     match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
     if match: return match.group(1)
     return text
 
-# [핵심] DeBrief(app_final_v84.py)의 강력한 폴백 함수 이식
 def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     genai.configure(api_key=api_key)
     
+    # 안정적인 모델 리스트
     fallback_chain = [start_model]
-    
-    # DeBrief 앱에서 사용된 백업 리스트 (그대로 적용)
-    # 최신 프리뷰 모델부터 경량화 모델까지 다양하게 포진되어 있어 성공률이 높음
     backups = [
-        "gemini-2.0-flash-lite-preview-02-05", 
+        "gemini-2.0-flash", 
         "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
+        "gemini-1.5-pro", 
+        "gemini-1.5-flash-8b"
     ]
-    
-    # 시작 모델과 중복되지 않게 체인 구성
     for b in backups:
         if b != start_model: fallback_chain.append(b)
     
@@ -99,25 +95,18 @@ def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     
     for model_name in fallback_chain:
         try:
-            # 모델 생성 및 호출
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1)  # 성공 시 1초 대기 (안정성 확보)
-            
-            # 텍스트와 성공한 모델명 반환 (DeBrief 방식)
+            time.sleep(1)
             return response.text, model_name 
-            
         except Exception as e:
             last_error = e
-            # 실패 시 0.5초 대기 후 다음 모델 시도
             time.sleep(0.5)
             continue
             
-    # 모든 모델 실패 시
-    raise Exception(f"All models failed. Last Error: {last_error}")
+    raise Exception(f"모델 생성 실패. API Key 확인 필요. 에러: {last_error}")
 
 def generate_plan_gemini(topic, api_key):
-    """Gemini로 기획안 생성"""
     try:
         prompt = f"""
         You are a professional Music Video Director.
@@ -149,23 +138,39 @@ def generate_plan_gemini(topic, api_key):
           ]
         }}
         """
-        
-        # [수정] DeBrief 방식 호출: 튜플(텍스트, 모델명) 반환 처리
-        response_text, used_model = generate_with_fallback(prompt, api_key, "gemini-1.5-flash")
-        
-        # 성공 시 어떤 모델이 쓰였는지 토스트 메시지로 확인 가능 (디버깅용)
-        # st.toast(f"✅ 사용된 모델: {used_model}") 
-        
+        response_text, _ = generate_with_fallback(prompt, api_key, "gemini-1.5-flash")
         json_str = clean_json_text(response_text)
         return json.loads(json_str)
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
         return None
 
-def get_pollinations_url(prompt):
-    """Pollinations.ai URL 생성"""
+def get_pollinations_url(prompt, is_turbo=False):
+    """이미지 URL 생성 (랜덤 시드 + 모델 선택)"""
     encoded_prompt = urllib.parse.quote(prompt)
-    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&model=flux&nologo=true"
+    seed = random.randint(0, 1000000) # [중요] 매번 다른 시드 사용
+    
+    model = "turbo" if is_turbo else "flux"
+    
+    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&model={model}&nologo=true&seed={seed}&enhance=false"
+
+def display_image_safely(url, caption):
+    """이미지 표시 안전 장치 (서버 다운로드 실패 시 클라이언트 렌더링)"""
+    try:
+        # 1. 서버에서 다운로드 시도 (3초 타임아웃)
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            st.image(response.content, caption=caption, use_container_width=True)
+        else:
+            raise Exception("Status code error")
+    except:
+        # 2. 실패 시 HTML로 브라우저가 직접 로드하게 함 (우회)
+        st.markdown(f'''
+        <div style="text-align: center;">
+            <img src="{url}" style="width: 100%; border-radius: 10px;" alt="{caption}">
+            <p style="font-size: 0.8em; color: gray;">{caption}</p>
+        </div>
+        ''', unsafe_allow_html=True)
 
 # --- 실행 로직 ---
 
@@ -201,7 +206,12 @@ if st.button("🚀 무료 생성 시작"):
                         st.code(plan_data['visual_style']['character_prompt'], language="text")
 
                 with tab2:
-                    for scene in plan_data['scenes']:
+                    st.info("💡 이미지가 뜨지 않으면 사이드바의 '고속 모드(Turbo)'를 켜보세요.")
+                    
+                    for i, scene in enumerate(plan_data['scenes']):
+                        # [중요] 3초 대기 (서버 과부하 방지)
+                        if i > 0: time.sleep(3)
+                        
                         with st.container():
                             st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
                             col1, col2 = st.columns([1, 1.5])
@@ -214,7 +224,11 @@ if st.button("🚀 무료 생성 시작"):
                                     st.code(scene['image_prompt'], language="text")
                             with col2:
                                 full_prompt = f"{plan_data['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                                img_url = get_pollinations_url(full_prompt)
-                                st.image(img_url, use_container_width=True)
+                                
+                                # Turbo 모드 반영하여 URL 생성
+                                img_url = get_pollinations_url(full_prompt, use_turbo)
+                                
+                                # 안전하게 이미지 표시
+                                display_image_safely(img_url, f"Scene {scene['scene_num']} Visualization")
+                                
                             st.markdown("</div>", unsafe_allow_html=True)
-

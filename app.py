@@ -5,12 +5,13 @@ import json
 import re
 import urllib.parse
 import time
+import random  # [추가] 랜덤 시드 생성을 위해 필요
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="AI MV Director (Free)", layout="wide")
 
 # --- 스타일링 ---
-st.markdown("""
+st.markdown("""ㅁㅁ
 <style>
     .scene-box {
         background-color: #f0f2f6;
@@ -216,3 +217,4 @@ if st.button("🚀 무료 생성 시작"):
                                 img_url = get_pollinations_url(full_prompt)
                                 st.image(img_url, use_container_width=True)
                             st.markdown("</div>", unsafe_allow_html=True)
+

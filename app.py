@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Diagnostic)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Zombie Mode)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -28,6 +28,15 @@ st.markdown("""
     .status-ok { color: green; font-weight: bold; }
     .status-err { color: red; font-weight: bold; }
     .status-warn { color: orange; font-weight: bold; }
+    .diagnostic-log {
+        font-family: monospace;
+        font-size: 0.8em;
+        max_height: 200px;
+        overflow-y: auto;
+        background-color: #f8f9fa;
+        padding: 10px;
+        border: 1px solid #ddd;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,57 +60,91 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # [핵심 기능] 모델 정밀 진단 도구
-    st.subheader("🏥 시스템 상태 확인")
+    # [핵심] 대규모 모델 리스트 (Zombie List)
+    st.subheader("🏥 시스템 생존 진단")
     
-    # 우리가 사용할 후보 모델 리스트
-    target_models = [
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.5-pro", 
+    # 알려진 모든 Gemini 모델 식별자 (순서: 최신 -> 구형)
+    all_known_models = [
+        # 2.0 Series (Newest)
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-2.0-flash-exp",
+        
+        # 1.5 Flash Series (Fast & Cheap)
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash-8b",
+        
+        # 1.5 Pro Series (High Quality)
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-latest",
+        "gemini-1.5-pro-001",
+        "gemini-1.5-pro-002",
+        
+        # Experimental (Randomly available)
+        "gemini-exp-1206",
+        "gemini-exp-1121",
+        "learnlm-1.5-pro-experimental",
+        
+        # 1.0 Legacy (Last Resort)
         "gemini-1.0-pro",
-        "gemini-flash-latest"
+        "gemini-1.0-pro-latest",
+        "gemini-pro"
     ]
     
-    if st.button("🧪 모델 정밀 진단 (생존 확인)"):
+    # 세션에 '살아있는 모델' 저장
+    if 'alive_models' not in st.session_state:
+        st.session_state['alive_models'] = []
+
+    if st.button("🧬 전체 모델 정밀 스캔"):
         if not gemini_key:
-            st.error("API Key를 입력하세요.")
+            st.error("API Key 필요")
         else:
             genai.configure(api_key=gemini_key)
-            st.write("🔍 각 모델을 테스트 중입니다...")
+            alive_list = []
             
-            valid_model_found = False
-            
-            # 각 모델을 순회하며 실제 요청을 보내봄
-            for m in target_models:
-                try:
-                    # 토큰 1개짜리 초경량 요청 보내기 (비용 절감)
-                    model = genai.GenerativeModel(m)
-                    response = model.generate_content("Hi", generation_config={"max_output_tokens": 1})
-                    
-                    st.markdown(f"✅ **{m}**: <span class='status-ok'>사용 가능 (OK)</span>", unsafe_allow_html=True)
-                    valid_model_found = True
-                    
-                except Exception as e:
-                    err_msg = str(e)
-                    if "429" in err_msg or "Quota" in err_msg:
-                        st.markdown(f"⚠️ **{m}**: <span class='status-warn'>한도 초과 (429)</span>", unsafe_allow_html=True)
-                    elif "404" in err_msg or "Not Found" in err_msg:
-                        st.markdown(f"❌ **{m}**: <span class='status-err'>모델 없음 (404)</span>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"❌ **{m}**: <span class='status-err'>에러 ({err_msg[:30]}...)</span>", unsafe_allow_html=True)
-            
-            if not valid_model_found:
-                st.error("🚨 사용 가능한 모델이 하나도 없습니다! API Key를 새로 발급받거나 다른 구글 계정을 사용하세요.")
-            else:
-                st.success("진단 완료. '사용 가능' 뜬 모델이 자동으로 우선 사용됩니다.")
+            with st.status("🔍 모델 생존 여부 확인 중...", expanded=True) as status:
+                st.write("각 모델에 'Hi'를 보내 응답을 확인합니다.")
+                
+                for m in all_known_models:
+                    try:
+                        # 최소 토큰으로 핑(Ping) 테스트
+                        model = genai.GenerativeModel(m)
+                        model.generate_content("Hi", generation_config={"max_output_tokens": 1})
+                        
+                        st.markdown(f"✅ **{m}**: <span class='status-ok'>생존 (Alive)</span>", unsafe_allow_html=True)
+                        alive_list.append(m)
+                        
+                    except Exception as e:
+                        err_msg = str(e)
+                        if "429" in err_msg or "Quota" in err_msg:
+                            st.markdown(f"⚠️ **{m}**: <span class='status-warn'>한도 초과 (429)</span>", unsafe_allow_html=True)
+                        elif "404" in err_msg or "Not Found" in err_msg:
+                            # 404는 너무 많으므로 로그 간소화
+                            # st.markdown(f"❌ **{m}**: <span class='status-err'>없음 (404)</span>", unsafe_allow_html=True)
+                            pass
+                        else:
+                            st.markdown(f"❌ **{m}**: <span class='status-err'>사망 ({err_msg[:20]}...)</span>", unsafe_allow_html=True)
+                
+                if alive_list:
+                    st.session_state['alive_models'] = alive_list
+                    status.update(label=f"스캔 완료! 생존 모델 {len(alive_list)}개 발견", state="complete")
+                else:
+                    status.update(label="스캔 실패: 생존 모델 0개", state="error")
+                    st.error("모든 모델이 응답하지 않습니다. API Key를 점검하세요.")
 
-    st.markdown("---")
+    # 스캔 결과에 따라 선택박스 업데이트
+    final_model_list = st.session_state['alive_models'] if st.session_state['alive_models'] else all_known_models
     
-    # 모델 선택 (진단 결과 참고용)
-    st.subheader("🤖 분석 모델")
-    gemini_model = st.selectbox("기본 분석 모델", target_models, index=1) # 1.5-flash 기본
+    st.markdown("---")
+    st.subheader("🤖 분석 모델 선택")
+    gemini_model = st.selectbox(
+        "사용할 모델", 
+        final_model_list, 
+        index=0,
+        help="스캔을 돌리면 살아있는 모델만 표시됩니다."
+    )
     
     st.markdown("---")
     st.subheader("🎨 이미지 모델")
@@ -113,12 +156,12 @@ with st.sidebar:
 
 # --- 메인 타이틀 ---
 st.title("🎬 AI MV Director")
-st.caption("System Diagnostic Mode | Real-time Status Check")
+st.caption("Massive Model Scanner Mode | Zombie Fallback")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
 # ------------------------------------------------------------------
-# 1. Gemini 로직 (진단 기반 폴백 시스템)
+# 1. Gemini 로직 (생존자 우선 투입)
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
@@ -131,23 +174,29 @@ def clean_json_text(text):
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
     
-    # 진단 리스트와 동일한 백업 구성
-    backups = [
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-1.5-pro", 
-        "gemini-1.0-pro", 
-        "gemini-flash-latest"
-    ]
+    # 1. 시작 모델 + 스캔된 생존 모델들 + 전체 리스트 (중복 제거)
+    # 전략: 사용자가 고른 놈 -> 스캔으로 확인된 산 놈들 -> 나머지 전체
     
-    # 선택한 모델을 맨 앞으로, 나머지는 뒤로
     fallback_chain = [start_model]
-    for b in backups:
-        if b != start_model: fallback_chain.append(b)
+    
+    # 이미 살아있다고 확인된 모델들을 우선 배치 (매우 중요)
+    if 'alive_models' in st.session_state and st.session_state['alive_models']:
+        for m in st.session_state['alive_models']:
+            if m not in fallback_chain:
+                fallback_chain.append(m)
+    
+    # 혹시 모르니 나머지 리스트도 뒤에 붙임 (보험)
+    all_backups = [
+        "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-1.5-pro", "gemini-1.0-pro"
+    ]
+    for b in all_backups:
+        if b not in fallback_chain:
+            fallback_chain.append(b)
             
     last_error = None
     
+    # 2. 순차 실행
     for model_name in fallback_chain:
         try:
             model = genai.GenerativeModel(model_name)
@@ -161,7 +210,7 @@ def generate_with_fallback(prompt, api_key, start_model):
             time.sleep(0.5)
             continue
             
-    raise Exception(f"All models failed. Last Error: {last_error}")
+    raise Exception(f"All models ({len(fallback_chain)} tried) failed. Last Error: {last_error}")
 
 def generate_plan_gemini(topic, api_key, model_name):
     try:

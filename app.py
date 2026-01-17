@@ -4,6 +4,7 @@ import os
 import json
 import re
 import urllib.parse
+import time  # [추가] 재시도 로직을 위해 필요
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="AI MV Director (Free)", layout="wide")
@@ -73,12 +74,41 @@ def clean_json_text(text):
     if match: return match.group(1)
     return text
 
-def generate_plan_gemini(topic, api_key):
-    """Gemini로 기획안 생성"""
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro') # 또는 gemini-pro
+# [수정] 404 에러 방지를 위한 모델 자동 변경 함수 추가
+def generate_with_fallback(prompt, api_key):
+    genai.configure(api_key=api_key)
+    
+    # 시도할 모델 순서 (최신 -> 구버전 순)
+    # 1.5-pro가 404 에러가 날 경우 2.0-flash나 1.5-flash로 자동 전환됩니다.
+    models_to_try = [
+        "gemini-2.0-flash",        # 최신/고속
+        "gemini-1.5-pro-latest",   # Pro 최신
+        "gemini-1.5-pro",          # Pro 일반
+        "gemini-1.5-flash",        # Flash 일반
+        "gemini-1.5-flash-8b",     # Flash 경량
+        "gemini-1.0-pro"           # 구버전
+    ]
+    
+    last_error = None
+    
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            time.sleep(1) # 과부하 방지
+            return response.text
+        except Exception as e:
+            last_error = e
+            # 에러 발생 시(404 등) 다음 모델로 넘어감
+            time.sleep(0.5)
+            continue
+            
+    # 모든 모델 실패 시 에러 발생
+    raise Exception(f"모든 모델 시도 실패. 마지막 에러: {last_error}")
 
+def generate_plan_gemini(topic, api_key):
+    """Gemini로 기획안 생성 (Fallback 적용)"""
+    try:
         prompt = f"""
         You are a professional Music Video Director.
         Analyze the following theme: "{topic}"
@@ -110,8 +140,10 @@ def generate_plan_gemini(topic, api_key):
         }}
         """
         
-        response = model.generate_content(prompt)
-        json_str = clean_json_text(response.text)
+        # [수정] 단일 호출 대신 Fallback 함수 사용
+        response_text = generate_with_fallback(prompt, api_key)
+        
+        json_str = clean_json_text(response_text)
         return json.loads(json_str)
     except Exception as e:
         st.error(f"오류 발생: {e}")

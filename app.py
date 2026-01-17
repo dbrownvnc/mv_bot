@@ -8,24 +8,26 @@ import time
 import random
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Stable)", layout="wide")
+st.set_page_config(page_title="AI MV Director (Real-time)", layout="wide")
 
 # --- 스타일링 ---
 st.markdown("""
 <style>
     .scene-box {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
+        background-color: #f8f9fa;
         border-radius: 12px;
         padding: 20px;
-        margin-bottom: 20px;
+        margin-bottom: 25px;
         border-left: 6px solid #FF4B4B;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .status-text {
-        color: #666;
-        font-size: 0.9em;
-        font-style: italic;
+    .status-badge {
+        background-color: #e6f3ff;
+        color: #0066cc;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -49,20 +51,15 @@ with st.sidebar:
         api_key = st.text_input("Google Gemini API Key", type="password")
     
     st.markdown("---")
-    st.info("💡 팁: 이미지가 생성되는 동안 '새로고침'을 하지 마세요.")
-    
-    # [추가] 초기화 버튼 (새로운 주제로 다시 시작하고 싶을 때)
-    if st.button("🔄 프로젝트 초기화 (Reset)"):
-        st.session_state.clear()
-        st.rerun()
+    st.info("💡 팁: 이미지가 안 뜨면 3~4초 기다려보세요. 순차적으로 생성됩니다.")
 
 # --- 메인 타이틀 ---
-st.title("🎬 AI MV Director (Stable Mode)")
-st.subheader("끊김 없는 뮤직비디오 스토리보드 제작")
+st.title("🎬 AI MV Director (Live Mode)")
+st.subheader("실시간으로 그려지는 뮤직비디오 스토리보드")
 
 topic = st.text_area("영상 주제 입력", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
 
-# --- [유지] Gemini 기획안 생성 함수 (수정 없음) ---
+# --- 함수 모음 ---
 
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -73,6 +70,7 @@ def clean_json_text(text):
 
 def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
     genai.configure(api_key=api_key)
+    # DeBrief 앱과 동일한 검증된 모델 리스트
     backups = [
         "gemini-2.0-flash-lite-preview-02-05", 
         "gemini-1.5-flash", 
@@ -80,6 +78,7 @@ def generate_with_fallback(prompt, api_key, start_model="gemini-1.5-flash"):
         "gemini-1.0-pro", 
         "gemini-flash-latest"
     ]
+    
     fallback_chain = [start_model] + [b for b in backups if b != start_model]
     
     last_error = None
@@ -132,104 +131,82 @@ def generate_plan_gemini(topic, api_key):
         st.error(f"기획안 오류: {e}")
         return None
 
-# --- [수정] 이미지 URL 생성 함수 (안정성 강화) ---
 def get_pollinations_url(prompt):
+    # 프롬프트 길이 제한 및 랜덤 시드 적용
     safe_prompt = prompt[:400]
     encoded = urllib.parse.quote(safe_prompt)
-    seed = random.randint(0, 999999) # 매번 새로운 시드
-    # width/height를 16:9 비율(1024x576)로 고정
+    seed = random.randint(0, 999999)
+    # turbo 모델 사용 시도 (더 빠르고 제한이 적음) -> 실패하면 flux로 변경 가능
     return f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=576&model=flux&nologo=true&seed={seed}&enhance=false"
 
-# --- 실행 로직 (세션 상태 적용으로 해결) ---
+# --- 실행 로직 (순차 생성 적용) ---
 
-# 1. 세션 변수 초기화 (새로고침해도 데이터 유지)
-if 'plan_data' not in st.session_state:
-    st.session_state['plan_data'] = None
-if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {} # {scene_num: url} 저장
-
-start_btn = st.button("🚀 프로젝트 시작")
-
-if start_btn:
+if st.button("🚀 프로젝트 시작"):
     if not api_key or not topic:
         st.warning("API Key와 주제를 입력해주세요.")
     else:
-        # 기획안이 없거나 새로운 주제로 시작할 때
+        # 1. 기획안 작성 단계
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
-            st.session_state['generated_images'] = {} # 이미지 초기화
-            st.session_state['plan_data'] = generate_plan_gemini(topic, api_key)
-            status.update(label="기획안 작성 완료!", state="complete", expanded=False)
+            plan_data = generate_plan_gemini(topic, api_key)
+            status.update(label="기획안 작성 완료! 스토리보드 생성을 시작합니다.", state="complete", expanded=False)
 
-# 2. 기획안이 존재하면 화면 표시 (여기서부터는 버튼 안 눌러도 유지됨)
-if st.session_state['plan_data']:
-    plan = st.session_state['plan_data']
-    
-    st.divider()
-    st.markdown(f"## 🎥 {plan['project_title']}")
-    st.info(f"**로그라인:** {plan['logline']}")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("### 🎵 Music")
-        st.write(plan['music']['style'])
-        st.code(plan['music']['suno_prompt'], language="text")
-    with c2:
-        st.markdown("### 🎨 Visuals")
-        st.write(plan['visual_style']['description'])
-        st.code(plan['visual_style']['character_prompt'], language="text")
-    
-    st.markdown("---")
-    st.subheader("🖼️ 비주얼 스토리보드")
-
-    # 3. 씬별 표시 및 이미지 순차 생성
-    for scene in plan['scenes']:
-        scene_num = scene['scene_num']
-        
-        # 씬별 UI 박스 생성
-        with st.container():
-            st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
-            st.markdown(f"#### 🎬 Scene {scene_num} <span style='font-size:0.8em; color:gray'>({scene['timecode']})</span>", unsafe_allow_html=True)
+        if plan_data:
+            # 2. 기획 내용 먼저 화면에 표시 (사용자가 읽을 수 있게)
+            st.divider()
+            st.markdown(f"## 🎥 {plan_data['project_title']}")
+            st.info(f"**로그라인:** {plan_data['logline']}")
             
-            col_text, col_img = st.columns([1, 1.5])
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("### 🎵 Music")
+                st.write(plan_data['music']['style'])
+                st.code(plan_data['music']['suno_prompt'], language="text")
+            with c2:
+                st.markdown("### 🎨 Visuals")
+                st.write(plan_data['visual_style']['description'])
+                st.code(plan_data['visual_style']['character_prompt'], language="text")
             
-            with col_text:
-                st.write(f"**내용:** {scene['action']}")
-                st.write(f"**촬영:** {scene['camera']}")
-                with st.expander("프롬프트 상세"):
-                    st.code(scene['image_prompt'], language="text")
+            st.markdown("---")
+            st.subheader("🖼️ 비주얼 스토리보드 제작 (실시간)")
             
-            with col_img:
-                # A. 이미 생성된 이미지가 있으면 바로 보여줌 (저장된 URL 사용)
-                if scene_num in st.session_state['generated_images']:
-                    st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
-                    st.success("✅ 생성 완료")
+            # 3. 씬별 순차 생성 (여기서 하나씩 그리고 표시함)
+            
+            # 진행바 생성
+            progress_bar = st.progress(0)
+            total_scenes = len(plan_data['scenes'])
+            
+            for idx, scene in enumerate(plan_data['scenes']):
+                # 컨테이너를 먼저 만들어서 자리를 잡음
+                with st.container():
+                    st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
+                    st.markdown(f"#### 🎬 Scene {scene['scene_num']} <span style='font-size:0.8em; color:gray'>({scene['timecode']})</span>", unsafe_allow_html=True)
+                    
+                    col_text, col_img = st.columns([1, 1.5])
+                    
+                    with col_text:
+                        st.write(f"**내용:** {scene['action']}")
+                        st.write(f"**촬영:** {scene['camera']}")
+                        with st.expander("프롬프트 상세"):
+                            st.code(scene['image_prompt'], language="text")
+                            
+                    with col_img:
+                        # 이미지 생성 중임을 알리는 스피너
+                        with st.spinner(f"Scene {scene['scene_num']} 촬영 중... (잠시만 기다려주세요)"):
+                            
+                            # 1. 딜레이 (서버 차단 방지 3초)
+                            time.sleep(3.0) 
+                            
+                            # 2. URL 생성
+                            full_prompt = f"{plan_data['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                            img_url = get_pollinations_url(full_prompt)
+                            
+                            # 3. 이미지 표시
+                            st.image(img_url, use_container_width=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
                 
-                # B. 아직 생성 안 됐으면 지금 생성 (실시간)
-                else:
-                    status_placeholder = st.empty()
-                    status_placeholder.info("📸 촬영 중... (AI가 그리는 중)")
-                    
-                    # 서버 차단 방지를 위한 3초 대기
-                    time.sleep(3.0)
-                    
-                    # 이미지 URL 생성
-                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                    img_url = get_pollinations_url(full_prompt)
-                    
-                    # 세션에 저장 (중요!)
-                    st.session_state['generated_images'][scene_num] = img_url
-                    
-                    # 화면 표시
-                    status_placeholder.empty() # "촬영 중" 메시지 삭제
-                    st.image(img_url, use_container_width=True)
-                    
-                    # 다음 장면으로 자연스럽게 넘어가기 위해 리런 (선택사항이나 안정성을 위해 추천)
-                    time.sleep(0.5)
-                    st.rerun()
+                # 진행률 업데이트
+                progress_bar.progress((idx + 1) / total_scenes)
             
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    # 모든 이미지가 다 생성되었으면 축하 메시지
-    if len(st.session_state['generated_images']) == len(plan['scenes']):
-        st.success("✨ 모든 장면의 촬영이 완료되었습니다!")
-        st.balloons()
+            st.success("✨ 모든 장면 촬영이 완료되었습니다!")
+            st.balloons()

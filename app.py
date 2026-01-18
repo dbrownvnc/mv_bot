@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Router+SDXL)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (Auto-Link)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -79,13 +79,13 @@ with st.sidebar:
     else:
         hf_token = st.text_input("Hugging Face Token", type="password")
     
-    # [핵심 수정] SDXL을 기본값(index=0)으로 강제 설정
+    # 모델 선택
     hf_model_id = st.selectbox(
         "이미지 모델",
         [
-            "stabilityai/stable-diffusion-xl-base-1.0", # [정답] 라우터에서 가장 잘 됨
-            "runwayml/stable-diffusion-v1-5",    # [백업] 화질은 낮지만 빠름
-            "black-forest-labs/FLUX.1-dev",     # [주의] 무료 서버에서 404/403 자주 뜸
+            "stabilityai/stable-diffusion-xl-base-1.0", # [추천]
+            "runwayml/stable-diffusion-v1-5", 
+            "black-forest-labs/FLUX.1-dev", 
         ],
         index=0
     )
@@ -187,11 +187,19 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. [최종 수정] Hugging Face 이미지 생성 (Router + 에러 시각화)
+# 2. [완벽 해결] Hugging Face 이미지 생성 (Multi-URL Smart Try)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
-    # [FIX] api-inference 대신 router 사용 (410 에러 해결)
-    api_url = f"https://router.huggingface.co/models/{model_id}"
+    """
+    여러 API 주소(endpoint)를 순차적으로 시도하여 이미지를 받아옵니다.
+    404, 410 에러가 나면 즉시 다음 주소로 넘어갑니다.
+    """
+    
+    # 시도할 주소 목록 (순서 중요: 표준 -> 라우터)
+    base_urls = [
+        f"https://api-inference.huggingface.co/models/{model_id}", # SDXL 등 대부분
+        f"https://router.huggingface.co/models/{model_id}",       # FLUX 등 일부
+    ]
     
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
@@ -201,37 +209,44 @@ def generate_image_hf(prompt, token, model_id):
         "parameters": {"seed": seed}
     }
 
-    for attempt in range(5):
-        try:
-            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
-            
-            # 200 OK: 성공 -> 이미지 반환
-            if response.status_code == 200:
-                return Image.open(BytesIO(response.content)), None
-            
-            # 에러 발생 시 처리
-            else:
+    last_error = None
+
+    # 각 주소에 대해 시도
+    for url in base_urls:
+        # 주소별로 최대 3번 시도 (로딩 대기 포함)
+        for attempt in range(3):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=60)
+                
+                # [성공] 200 OK
+                if response.status_code == 200:
+                    return Image.open(BytesIO(response.content)), None
+                
+                # [치명적 에러] 주소 틀림 (404, 410) -> 즉시 다음 URL 시도
+                if response.status_code in [404, 410]:
+                    last_error = f"Address Failed ({response.status_code})"
+                    break # 현재 URL 포기하고 다음 URL 루프로
+                
+                # [대기 필요] 503 모델 로딩 중
                 try:
                     err_json = response.json()
-                    # 503: 모델 로딩 중
                     if "estimated_time" in err_json:
                         wait_time = err_json.get("estimated_time", 20)
-                        st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기 ({attempt+1}/5)")
+                        st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기")
                         time.sleep(wait_time + 2)
-                        continue
-                    
-                    return None, f"API Error ({response.status_code}): {err_json}"
-                    
-                except json.JSONDecodeError:
-                    # JSON이 아님 (404 Not Found HTML 등)
-                    return None, f"Server Error ({response.status_code}): 주소/모델 확인 필요. ({api_url})"
+                        continue # 같은 URL 재시도
+                except:
+                    pass
                 
-        except Exception as e:
-            time.sleep(1)
-            if attempt == 4:
-                return None, str(e)
-            
-    return None, "시간 초과: 모델 응답 없음"
+                # 기타 에러 (403 권한 등)
+                last_error = f"Error {response.status_code}: {response.text[:100]}"
+                break # 다음 URL 시도 (혹시 모르니)
+
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(1)
+    
+    return None, f"모든 연결 실패. 마지막 에러: {last_error}"
 
 # ------------------------------------------------------------------
 # 3. 메인 실행 로직
@@ -324,8 +339,8 @@ if st.session_state['plan_data']:
                             st.rerun()
                         else:
                             st.error(f"실패: {err_msg}")
-                            if "404" in str(err_msg):
-                                st.warning("⚠️ 선택한 모델이 라우터에 없습니다. 'stable-diffusion-xl-base-1.0'을 사용하세요.")
+                            if "403" in str(err_msg):
+                                st.warning("⚠️ 약관 동의(Accept License)가 필요한 모델입니다.")
             else:
                 st.warning("HF 토큰 필요")
 

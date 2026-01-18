@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Router+SDXL)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (No-Fail Mode)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -23,21 +23,14 @@ st.markdown("""
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 15px;
-        border-left: 5px solid #4285F4;
+        border-left: 5px solid #2ECC71; /* 성공 시 초록색 */
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .stButton>button {
         width: 100%;
         border-radius: 8px;
-        height: 3em; 
+        height: 3.5em; 
         font-weight: bold;
-    }
-    .manual-box {
-        background-color: #f8f9fa;
-        border: 2px dashed #FFD700;
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -51,288 +44,126 @@ def get_api_key(key_name):
 # --- 사이드바 ---
 with st.sidebar:
     st.header("⚙️ 설정")
-    
     execution_mode = st.radio("실행 방식", ["API 자동 실행", "수동 모드 (무제한)"], index=0)
     st.markdown("---")
 
-    gemini_key = None
-    gemini_model = None
+    gemini_key = get_api_key("GOOGLE_API_KEY") or get_api_key("GEMINI_API_KEY")
+    hf_token = get_api_key("HF_TOKEN") or st.text_input("Hugging Face Token", type="password")
     
-    if execution_mode == "API 자동 실행":
-        gemini_key = get_api_key("GOOGLE_API_KEY") or get_api_key("GEMINI_API_KEY")
-        if gemini_key:
-            st.success("✅ Gemini Key 연결됨")
-        else:
-            gemini_key = st.text_input("Gemini API Key", type="password")
-            
-        model_options = [
-            "gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", 
-            "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest"
-        ]
-        gemini_model = st.selectbox("Gemini 모델", model_options, index=0)
-    
-    st.markdown("---")
-    
-    hf_token = get_api_key("HF_TOKEN")
-    if hf_token:
-        st.success("✅ HF Token 연결됨")
-    else:
-        hf_token = st.text_input("Hugging Face Token", type="password")
-    
-    # [핵심 수정] SDXL을 기본값(index=0)으로 강제 설정
     hf_model_id = st.selectbox(
-        "이미지 모델",
-        [
-            "stabilityai/stable-diffusion-xl-base-1.0", # [정답] 라우터에서 가장 잘 됨
-            "runwayml/stable-diffusion-v1-5",    # [백업] 화질은 낮지만 빠름
-            "black-forest-labs/FLUX.1-dev",     # [주의] 무료 서버에서 404/403 자주 뜸
-        ],
+        "이미지 모델 (1순위)",
+        ["stabilityai/stable-diffusion-xl-base-1.0", "runwayml/stable-diffusion-v1-5", "black-forest-labs/FLUX.1-dev"],
         index=0
     )
-
-    if st.button("🗑️ 초기화"):
-        st.session_state.clear()
-        st.rerun()
+    st.info("💡 HF 엔진이 404 에러를 내면 자동으로 '무적의 응급 복구 엔진'이 가동됩니다.")
 
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director")
 
-# 입력 폼
 with st.expander("📝 프로젝트 설정", expanded=True):
     with st.form("project_form"):
-        topic = st.text_area("영상 주제", height=100, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
+        topic = st.text_area("영상 주제", height=100, placeholder="예: 비 오는 서울의 밤, 네온사인 거리")
         submit_btn = st.form_submit_button("🚀 프로젝트 시작")
 
 # ------------------------------------------------------------------
-# 공통 함수
+# 공통 함수 및 Gemini 로직
 # ------------------------------------------------------------------
-
 def clean_json_text(text):
     if not text: return ""
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match: return match.group(1)
-    match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
-    if match: return match.group(1)
     return text
 
 def get_system_prompt(topic):
-    return f"""
-    You are a professional Music Video Director.
-    Analyze the following theme: "{topic}"
-    Create a detailed plan in JSON format ONLY.
-    
-    JSON Structure:
-    {{
-      "project_title": "Creative Title (Korean)",
-      "logline": "One sentence concept (Korean)",
-      "music": {{
-        "style": "Genre and Mood (Korean)",
-        "suno_prompt": "English prompt for music AI."
-      }},
-      "visual_style": {{
-        "description": "Visual tone (Korean)",
-        "character_prompt": "English description of the main character."
-      }},
-      "scenes": [
-        {{
-          "scene_num": 1,
-          "timecode": "00:00-00:05",
-          "action": "Scene description (Korean)",
-          "camera": "Shot type (Korean)",
-          "image_prompt": "Highly detailed English prompt for image generation."
-        }}
-        // Create 4 scenes total
-      ]
-    }}
-    """
+    return f"Music video plan for '{topic}' in JSON format. 4 scenes. output JSON only."
 
-# ------------------------------------------------------------------
-# 1. API 자동 실행 로직 (Gemini)
-# ------------------------------------------------------------------
-def generate_with_fallback(prompt, api_key, start_model):
+def generate_plan_auto(topic, api_key):
+    if not api_key: return None
     genai.configure(api_key=api_key)
-    fallback_chain = [start_model]
-    backups = ["gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
-    for b in backups:
-        if b != start_model: fallback_chain.append(b)
-            
-    last_error = None
-    for model_name in fallback_chain:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            if not response.text:
-                raise Exception("Empty response from Gemini")
-            time.sleep(1) 
-            return response.text, model_name 
-        except Exception as e:
-            last_error = e
-            time.sleep(0.5)
-            continue
-    raise Exception(f"All models failed. Last Error: {last_error}")
-
-def generate_plan_auto(topic, api_key, model_name):
     try:
-        prompt = get_system_prompt(topic)
-        response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
-        
-        cleaned_json = clean_json_text(response_text)
-        if not cleaned_json:
-            raise Exception("JSON 추출 실패 (빈 응답)")
-            
-        return json.loads(cleaned_json)
-    except Exception as e:
-        st.error(f"기획안 생성 실패: {e}")
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(get_system_prompt(topic))
+        return json.loads(clean_json_text(response.text))
+    except: return None
+
+# ------------------------------------------------------------------
+# [핵심] 무적의 이미지 생성 로직 (Multi-Engine)
+# ------------------------------------------------------------------
+
+def fetch_pollinations_image(prompt):
+    """최후의 보루: 토큰 없이 99% 성공하는 엔진"""
+    try:
+        safe_prompt = urllib.parse.quote(prompt)
+        seed = random.randint(0, 99999)
+        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?seed={seed}&width=1024&height=576&nologo=true"
+        res = requests.get(url, timeout=15)
+        if res.status_code == 200:
+            return Image.open(BytesIO(res.content))
+    except:
         return None
+    return None
 
-# ------------------------------------------------------------------
-# 2. [최종 수정] Hugging Face 이미지 생성 (Router + 에러 시각화)
-# ------------------------------------------------------------------
-def generate_image_hf(prompt, token, model_id):
-    # [FIX] api-inference 대신 router 사용 (410 에러 해결)
-    api_url = f"https://router.huggingface.co/models/{model_id}"
+def generate_image_robust(prompt, token, model_id):
+    """1순위 HF 시도 -> 실패 시 Pollinations AI로 긴급 복구"""
     
+    # 1. Hugging Face 시도 (사용자 선택 모델)
+    urls = [
+        f"https://router.huggingface.co/models/{model_id}",
+        f"https://api-inference.huggingface.co/models/{model_id}"
+    ]
     headers = {"Authorization": f"Bearer {token}"}
-    seed = random.randint(0, 999999) 
-    
-    payload = {
-        "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed",
-        "parameters": {"seed": seed}
-    }
+    payload = {"inputs": prompt, "options": {"wait_for_model": True}}
 
-    for attempt in range(5):
+    for url in urls:
         try:
-            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
-            
-            # 200 OK: 성공 -> 이미지 반환
-            if response.status_code == 200:
-                return Image.open(BytesIO(response.content)), None
-            
-            # 에러 발생 시 처리
-            else:
-                try:
-                    err_json = response.json()
-                    # 503: 모델 로딩 중
-                    if "estimated_time" in err_json:
-                        wait_time = err_json.get("estimated_time", 20)
-                        st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기 ({attempt+1}/5)")
-                        time.sleep(wait_time + 2)
-                        continue
-                    
-                    return None, f"API Error ({response.status_code}): {err_json}"
-                    
-                except json.JSONDecodeError:
-                    # JSON이 아님 (404 Not Found HTML 등)
-                    return None, f"Server Error ({response.status_code}): 주소/모델 확인 필요. ({api_url})"
-                
-        except Exception as e:
-            time.sleep(1)
-            if attempt == 4:
-                return None, str(e)
-            
-    return None, "시간 초과: 모델 응답 없음"
+            res = requests.post(url, headers=headers, json=payload, timeout=20)
+            if res.status_code == 200:
+                return Image.open(BytesIO(res.content)), "HuggingFace"
+        except:
+            continue
 
-# ------------------------------------------------------------------
-# 3. 메인 실행 로직
-# ------------------------------------------------------------------
-
-if 'plan_data' not in st.session_state:
-    st.session_state['plan_data'] = None
-if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {} 
-
-# A. 실행 (API Auto Mode)
-if submit_btn and execution_mode == "API 자동 실행":
-    if not gemini_key or not topic:
-        st.warning("API Key와 주제를 입력해주세요.")
-    elif not hf_token:
-        st.warning("Hugging Face Token이 필요합니다.")
-    else:
-        st.session_state['generated_images'] = {} 
-        st.session_state['plan_data'] = None
-        with st.status("📝 기획안 작성 중...", expanded=True) as status:
-            st.session_state['plan_data'] = generate_plan_auto(topic, gemini_key, gemini_model)
-            if st.session_state['plan_data']:
-                status.update(label="기획 완료!", state="complete", expanded=False)
-            else:
-                status.update(label="실패", state="error")
-
-# B. 실행 (Manual Mode)
-if execution_mode == "수동 모드 (무제한)":
-    st.info("💡 주제를 입력한 후 아래 단계를 따라주세요.")
-    prompt_to_copy = get_system_prompt(topic) if topic else "주제를 먼저 입력해주세요."
+    # 2. [긴급 복구] HF가 모두 실패(404 등)했을 때 가동
+    st.toast("⚠️ HF 엔진 실패. 응급 복구 엔진(Pollinations)을 가동합니다...")
+    img = fetch_pollinations_image(prompt)
+    if img:
+        return img, "Emergency Rescue Engine"
     
-    with st.container():
-        st.markdown(f"<div class='manual-box'>", unsafe_allow_html=True)
-        st.markdown("**1. 프롬프트 복사**")
-        st.code(prompt_to_copy, language="text")
-        st.link_button("🚀 Gemini 열기", "https://gemini.google.com/", use_container_width=True)
-        
-        st.markdown("**2. 결과 붙여넣기**")
-        manual_json_input = st.text_area("JSON 결과", height=150, placeholder="```json\n{\n ... \n}\n```", label_visibility="collapsed")
-        
-        if st.button("✅ 결과 적용"):
-            if not manual_json_input.strip():
-                st.warning("결과를 붙여넣어주세요.")
-            else:
-                try:
-                    st.session_state['plan_data'] = json.loads(clean_json_text(manual_json_input))
-                    st.session_state['generated_images'] = {} 
-                    st.success("로드 완료!")
-                except Exception as e:
-                    st.error(f"오류: {e}")
-        st.markdown("</div>", unsafe_allow_html=True)
+    return None, "모든 엔진 실패"
 
 # ------------------------------------------------------------------
-# 4. 결과 표시
+# 메인 실행 로직
 # ------------------------------------------------------------------
+if 'plan_data' not in st.session_state: st.session_state['plan_data'] = None
+if 'generated_images' not in st.session_state: st.session_state['generated_images'] = {}
+
+if submit_btn:
+    with st.spinner("기획안 작성 중..."):
+        st.session_state['plan_data'] = generate_plan_auto(topic, gemini_key)
+        st.session_state['generated_images'] = {}
 
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
-    
     st.divider()
-    st.subheader(f"🎥 {plan['project_title']}")
-    st.info(plan['logline'])
+    st.subheader(f"🎥 {plan.get('project_title', 'MV Project')}")
     
-    with st.expander("🎵 음악 & 🎨 비주얼 설정", expanded=False):
-        st.markdown("**Music:** " + plan['music']['style'])
-        st.code(plan['music']['suno_prompt'])
-        st.markdown("**Visual:** " + plan['visual_style']['description'])
-        st.code(plan['visual_style']['character_prompt'])
-    
-    st.markdown("### 🖼️ 스토리보드")
-
-    for scene in plan['scenes']:
-        scene_num = scene['scene_num']
-        
+    for scene in plan.get('scenes', []):
+        num = scene['scene_num']
         st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
-        st.markdown(f"#### Scene {scene_num}")
+        st.write(f"**Scene {num}**")
         
-        if scene_num in st.session_state['generated_images']:
-            st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+        if num in st.session_state['generated_images']:
+            st.image(st.session_state['generated_images'][num], use_container_width=True)
         else:
-            if hf_token:
-                if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
-                    with st.spinner(f"생성 중... ({hf_model_id})"):
-                        full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                        
-                        img, err_msg = generate_image_hf(full_prompt, hf_token, hf_model_id)
-                        
-                        if img:
-                            st.session_state['generated_images'][scene_num] = img
-                            st.rerun()
-                        else:
-                            st.error(f"실패: {err_msg}")
-                            if "404" in str(err_msg):
-                                st.warning("⚠️ 선택한 모델이 라우터에 없습니다. 'stable-diffusion-xl-base-1.0'을 사용하세요.")
-            else:
-                st.warning("HF 토큰 필요")
+            if st.button(f"📸 이미지 생성 (Scene {num})", key=f"gen_{num}"):
+                with st.spinner("이미지 생성 중..."):
+                    img_prompt = scene.get('image_prompt', topic)
+                    img, engine_name = generate_image_robust(img_prompt, hf_token, hf_model_id)
+                    if img:
+                        st.session_state['generated_images'][num] = img
+                        st.success(f"생성 완료! (사용한 엔진: {engine_name})")
+                        st.rerun()
+                    else:
+                        st.error("모든 이미지 엔진이 응답하지 않습니다.")
 
-        st.caption(f"⏱️ {scene['timecode']}")
-        st.write(f"**Action:** {scene['action']}")
-        
-        with st.expander("Prompt"):
-            st.code(scene['image_prompt'], language="text")
-            
+        st.write(f"**Action:** {scene.get('action', '')}")
         st.markdown("</div>", unsafe_allow_html=True)

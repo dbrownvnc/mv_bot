@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Router API)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (Robust)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -108,6 +108,7 @@ with st.expander("📝 프로젝트 설정", expanded=True):
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
+    if not text: return ""
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match: return match.group(1)
     match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
@@ -160,6 +161,8 @@ def generate_with_fallback(prompt, api_key, start_model):
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
+            if not response.text:
+                raise Exception("Empty response from Gemini")
             time.sleep(1) 
             return response.text, model_name 
         except Exception as e:
@@ -173,59 +176,65 @@ def generate_plan_auto(topic, api_key, model_name):
         prompt = get_system_prompt(topic)
         response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
         st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
-        return json.loads(clean_json_text(response_text))
+        
+        cleaned_json = clean_json_text(response_text)
+        if not cleaned_json:
+            raise Exception("JSON 추출 실패 (빈 응답)")
+            
+        return json.loads(cleaned_json)
     except Exception as e:
         st.error(f"기획안 생성 실패: {e}")
         return None
 
 # ------------------------------------------------------------------
-# 2. [수정 완료] Hugging Face 이미지 생성 로직 (URL 변경)
+# 2. [완벽 수정] Hugging Face 이미지 생성 (JSON 에러 방지)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
-    """
-    이미지 생성 함수. 실패 시 (None, 에러메시지)를 반환합니다.
-    URL이 'router.huggingface.co'로 업데이트되었습니다.
-    """
-    # [FIX] 410 에러 해결을 위해 URL 변경
+    # API URL 변경 (router.huggingface.co)
     api_url = f"https://router.huggingface.co/models/{model_id}"
     
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
     
-    # Payload
     payload = {
         "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed",
         "parameters": {"seed": seed}
     }
 
-    # 최대 5번 시도
     for attempt in range(5):
         try:
-            # 타임아웃을 60초로 넉넉하게 잡음 (모델 로딩 시간 고려)
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
             
-            # 200 OK: 성공
+            # 200 OK: 성공 -> 이미지 반환
             if response.status_code == 200:
                 return Image.open(BytesIO(response.content)), None
             
-            # 503 Service Unavailable: 모델 로딩 중 (Estimated Time)
-            elif "estimated_time" in response.json():
-                wait_time = response.json().get("estimated_time", 20)
-                st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기 ({attempt+1}/5)")
-                time.sleep(wait_time + 2) # 여유 있게 대기
-                continue
-            
-            # 그 외 에러 (403, 500 등)
+            # 에러 발생 시 처리 (여기가 핵심 수정 부분)
             else:
-                return None, f"Error {response.status_code}: {response.text}"
+                try:
+                    # JSON 응답 시도
+                    err_json = response.json()
+                    
+                    # 503: 모델 로딩 중
+                    if "estimated_time" in err_json:
+                        wait_time = err_json.get("estimated_time", 20)
+                        st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기 ({attempt+1}/5)")
+                        time.sleep(wait_time + 2)
+                        continue
+                    
+                    # 그 외 JSON 에러 메시지
+                    return None, f"API Error: {err_json}"
+                    
+                except json.JSONDecodeError:
+                    # [핵심] JSON이 아님 (HTML 등) -> raw text 반환
+                    return None, f"Server Error ({response.status_code}): {response.text[:200]}..."
                 
         except Exception as e:
             time.sleep(1)
-            # 마지막 시도였다면 에러 리턴
             if attempt == 4:
                 return None, str(e)
             
-    return None, "시간 초과: 모델이 응답하지 않습니다."
+    return None, "시간 초과: 모델 응답 없음"
 
 # ------------------------------------------------------------------
 # 3. 메인 실행 로직
@@ -311,7 +320,6 @@ if st.session_state['plan_data']:
                     with st.spinner(f"생성 중... ({hf_model_id})"):
                         full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                         
-                        # [중요] 에러 메시지까지 받음
                         img, err_msg = generate_image_hf(full_prompt, hf_token, hf_model_id)
                         
                         if img:
@@ -319,7 +327,7 @@ if st.session_state['plan_data']:
                             st.rerun()
                         else:
                             st.error(f"실패 원인: {err_msg}")
-                            # 403 에러면 친절하게 알려줌
+                            # 403 가이드
                             if "403" in str(err_msg):
                                 st.warning("⚠️ HF 사이트에서 약관 동의(Accept License)를 했는지 확인하세요.")
             else:

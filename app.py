@@ -30,12 +30,11 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .turntable-box {
-        background-color: #f0f9ff;
-        border: 2px solid #4285F4;
+        background-color: #fff9e6;
+        border: 2px solid #FFD700;
         border-radius: 12px;
-        padding: 20px;
+        padding: 15px;
         margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(66,133,244,0.15);
     }
     .stButton>button {
         width: 100%;
@@ -135,22 +134,22 @@ with st.sidebar:
     image_provider = st.selectbox(
         "이미지 생성 엔진",
         [
-            "Segmind (안정)",
             "Pollinations Turbo (초고속) ⚡",
             "Pollinations Flux (고품질)",
             "Hugging Face Schnell (빠름)",
             "Image.AI (무제한)",
+            "Segmind (안정)",
         ],
-        index=0
+        index=4  # Segmind를 기본으로 설정
     )
     
     # 엔진별 설명
     engine_info = {
-        "Segmind (안정)": "✨ 안정적 (기본 추천)",
         "Pollinations Turbo (초고속) ⚡": "✨ 1-2초 생성, 무료, 무제한",
         "Pollinations Flux (고품질)": "✨ 고품질, 3-5초, 무료",
         "Hugging Face Schnell (빠름)": "✨ 빠른 생성, 무료",
-        "Image.AI (무제한)": "✨ 완전 무제한"
+        "Image.AI (무제한)": "✨ 완전 무제한",
+        "Segmind (안정)": "✨ 안정적 (기본 추천)"
     }
     st.caption(engine_info[image_provider])
     
@@ -265,7 +264,7 @@ def get_system_prompt(topic, scene_count, options):
     return f"""
     You are a professional Music Video Director.
     Analyze the following theme: "{topic}"
-    Create a detailed plan with {scene_count} scenes in JSON format ONLY.
+    Create a detailed plan with TURNTABLE references and {scene_count} scenes in JSON format ONLY.
     
     Story Requirements: {story_instruction}
     
@@ -281,14 +280,26 @@ def get_system_prompt(topic, scene_count, options):
         "description": "Visual tone (Korean)",
         "character_prompt": "English description of the main character."
       }},
-      "turntable_references": [
-        {{
-          "type": "character/object/environment",
-          "name": "Name (Korean)",
-          "description": "Detailed description (Korean)",
-          "turntable_prompt": "Highly detailed English prompt for turntable/reference image generation. Include: lighting (studio lighting, neutral background), camera angle (360 degree view or front/side/back), material details, textures, colors, and specific features."
-        }}
-      ],
+      "turntable": {{
+        "characters": [
+          {{
+            "name": "Character name (Korean)",
+            "prompt": "Turntable shot: full body character turnaround, white background, 360 degree view, character design sheet, multiple angles, front view, side view, back view, 3/4 view, detailed character description..."
+          }}
+        ],
+        "backgrounds": [
+          {{
+            "name": "Location name (Korean)",
+            "prompt": "Turntable shot: environment 360 rotation, detailed location description, architectural details, lighting, atmosphere..."
+          }}
+        ],
+        "objects": [
+          {{
+            "name": "Object name (Korean)",
+            "prompt": "Turntable shot: product photography, 360 degree rotation, white background, detailed object description..."
+          }}
+        ]
+      }},
       "scenes": [
         {{
           "scene_num": 1,
@@ -302,7 +313,7 @@ def get_system_prompt(topic, scene_count, options):
       ]
     }}
     
-    IMPORTANT: Create 3-5 turntable_references for main characters, key objects, and important environments that will appear throughout the scenes.
+    IMPORTANT: Create at least 2-3 turntable references for main characters, key locations, and important objects.
     """
 
 # ------------------------------------------------------------------
@@ -370,7 +381,7 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
                 'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
             }
         ]
-    else:  # Segmind, Image.AI
+    else:  # Image.AI, Segmind
         endpoints = [
             {
                 'name': provider,
@@ -421,8 +432,8 @@ if 'turntable_status' not in st.session_state:
     st.session_state['turntable_status'] = {}
 if 'prompts_generated' not in st.session_state:
     st.session_state['prompts_generated'] = False
-if 'auto_generation_running' not in st.session_state:
-    st.session_state['auto_generation_running'] = False
+if 'turntables_generated' not in st.session_state:
+    st.session_state['turntables_generated'] = False
 
 # A. 실행 버튼 클릭 시 (Auto 모드)
 if submit_btn and execution_mode == "API 자동 실행":
@@ -435,7 +446,7 @@ if submit_btn and execution_mode == "API 자동 실행":
         st.session_state['turntable_status'] = {}
         st.session_state['plan_data'] = None
         st.session_state['prompts_generated'] = False
-        st.session_state['auto_generation_running'] = False
+        st.session_state['turntables_generated'] = False
         
         # 스토리 옵션 수집
         story_opts = {
@@ -460,12 +471,150 @@ if submit_btn and execution_mode == "API 자동 실행":
             plan = st.session_state['plan_data']
             st.session_state['prompts_generated'] = True
             
+            # 기획안 및 모든 프롬프트 표시
             with plan_container.container():
                 st.markdown("<div class='status-box'>✅ 기획안 및 프롬프트 생성 완료!</div>", unsafe_allow_html=True)
+                st.subheader(f"🎥 {plan['project_title']}")
+                st.info(plan['logline'])
+                
+                with st.expander("📋 전체 기획안 보기", expanded=False):
+                    st.markdown(f"**음악 스타일:** {plan['music']['style']}")
+                    st.code(plan['music']['suno_prompt'], language="text")
+                    st.markdown(f"**비주얼 스타일:** {plan['visual_style']['description']}")
+                    st.code(plan['visual_style']['character_prompt'], language="text")
+                
+                # 턴테이블 프롬프트 표시
+                st.markdown("---")
+                st.markdown("### 🎭 턴테이블 레퍼런스 프롬프트")
+                
+                if 'turntable' in plan:
+                    turntable = plan['turntable']
+                    
+                    if turntable.get('characters'):
+                        st.markdown("**👤 캐릭터**")
+                        for char in turntable['characters']:
+                            with st.expander(f"🎭 {char['name']}", expanded=False):
+                                st.code(char['prompt'], language="text")
+                    
+                    if turntable.get('backgrounds'):
+                        st.markdown("**🏙️ 배경**")
+                        for bg in turntable['backgrounds']:
+                            with st.expander(f"🏙️ {bg['name']}", expanded=False):
+                                st.code(bg['prompt'], language="text")
+                    
+                    if turntable.get('objects'):
+                        st.markdown("**📦 오브젝트**")
+                        for obj in turntable['objects']:
+                            with st.expander(f"📦 {obj['name']}", expanded=False):
+                                st.code(obj['prompt'], language="text")
+                
+                # 씬 프롬프트 미리보기
+                st.markdown("---")
+                st.markdown("### 📝 씬 프롬프트 미리보기")
+                
+                for scene in plan['scenes']:
+                    with st.expander(f"🎬 Scene {scene['scene_num']} - {scene['action'][:50]}...", expanded=False):
+                        st.caption(f"⏱️ {scene['timecode']}")
+                        st.write(f"**액션:** {scene['action']}")
+                        st.write(f"**카메라:** {scene['camera']}")
+                        
+                        st.markdown("**이미지 프롬프트:**")
+                        full_img_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                        st.code(full_img_prompt, language="text")
+                        
+                        if 'video_prompt' in scene:
+                            st.markdown("**영상 프롬프트:**")
+                            st.code(scene['video_prompt'], language="text")
             
-            # 자동 생성 활성화시 즉시 이미지 생성 시작
+            # 2. 자동 이미지 생성
             if auto_generate:
-                st.session_state['auto_generation_running'] = True
+                st.markdown("---")
+                
+                # 턴테이블 자동 생성
+                if 'turntable' in plan:
+                    st.markdown("### 🎭 턴테이블 이미지 자동 생성")
+                    
+                    turntable = plan['turntable']
+                    all_turntables = []
+                    
+                    if turntable.get('characters'):
+                        for char in turntable['characters']:
+                            all_turntables.append(('character', char))
+                    if turntable.get('backgrounds'):
+                        for bg in turntable['backgrounds']:
+                            all_turntables.append(('background', bg))
+                    if turntable.get('objects'):
+                        for obj in turntable['objects']:
+                            all_turntables.append(('object', obj))
+                    
+                    if all_turntables:
+                        progress_bar_tt = st.progress(0)
+                        status_container_tt = st.container()
+                        
+                        for idx, (tt_type, tt_item) in enumerate(all_turntables):
+                            tt_key = f"{tt_type}_{tt_item['name']}"
+                            
+                            with status_container_tt:
+                                st.markdown(f"<div class='status-box'>🎭 {tt_item['name']} 턴테이블 생성 중... ({idx+1}/{len(all_turntables)})</div>", unsafe_allow_html=True)
+                            
+                            img, provider = try_generate_image_with_fallback(
+                                tt_item['prompt'],
+                                1024,
+                                1024,
+                                image_provider,
+                                max_retries=max_retries
+                            )
+                            
+                            if img:
+                                st.session_state['turntable_images'][tt_key] = img
+                                st.session_state['turntable_status'][tt_key] = f"✅ 성공 ({provider})"
+                                st.toast(f"✅ {tt_item['name']} 완료!")
+                            else:
+                                st.session_state['turntable_status'][tt_key] = "❌ 생성 실패"
+                            
+                            progress_bar_tt.progress((idx + 1) / len(all_turntables))
+                            time.sleep(0.3)
+                        
+                        st.session_state['turntables_generated'] = True
+                        st.markdown("<div class='status-box'>✅ 턴테이블 생성 완료!</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                
+                # 씬 이미지 자동 생성
+                st.markdown("### 🎨 씬 이미지 자동 생성")
+                total_scenes = len(plan['scenes'])
+                
+                progress_bar = st.progress(0)
+                status_container = st.container()
+                
+                for idx, scene in enumerate(plan['scenes']):
+                    scene_num = scene['scene_num']
+                    
+                    with status_container:
+                        st.markdown(f"<div class='status-box'>🎬 Scene {scene_num} 이미지 생성 중... ({idx+1}/{total_scenes})</div>", unsafe_allow_html=True)
+                    
+                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                    
+                    img, provider = try_generate_image_with_fallback(
+                        full_prompt,
+                        image_width,
+                        image_height,
+                        image_provider,
+                        max_retries=max_retries
+                    )
+                    
+                    if img:
+                        st.session_state['generated_images'][scene_num] = img
+                        st.session_state['image_status'][scene_num] = f"✅ 성공 ({provider})"
+                        st.toast(f"✅ Scene {scene_num} 완료!")
+                    else:
+                        st.session_state['image_status'][scene_num] = "❌ 생성 실패"
+                        st.warning(f"⚠️ Scene {scene_num} 생성 실패")
+                    
+                    progress_bar.progress((idx + 1) / total_scenes)
+                    time.sleep(0.3)
+                
+                st.markdown("<div class='status-box'>✅ 모든 이미지 생성 완료!</div>", unsafe_allow_html=True)
+                time.sleep(1)
                 st.rerun()
         else:
             plan_container.markdown("<div class='error-box'>❌ 기획안 생성 실패</div>", unsafe_allow_html=True)
@@ -518,236 +667,160 @@ if execution_mode == "수동 모드 (무제한)":
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# 4. 자동 이미지 생성 프로세스
+# 4. 결과 표시
 # ------------------------------------------------------------------
 
-if st.session_state.get('auto_generation_running') and st.session_state['plan_data']:
+if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
     
     st.markdown("---")
-    st.markdown("### 🎨 자동 이미지 생성 중...")
     
-    progress_container = st.container()
-    
-    # 1단계: 턴테이블 이미지 생성
-    if 'turntable_references' in plan and plan['turntable_references']:
-        turntables = plan['turntable_references']
-        total_turntables = len(turntables)
+    # 턴테이블 섹션
+    if 'turntable' in plan:
+        st.markdown("### 🎭 턴테이블 레퍼런스")
         
-        with progress_container:
-            st.markdown("#### 📐 레퍼런스 이미지 생성")
-            turntable_progress = st.progress(0)
-            turntable_status = st.empty()
+        turntable = plan['turntable']
+        all_turntables = []
         
-        for idx, ref in enumerate(turntables):
-            ref_key = f"{ref['type']}_{idx}"
+        if turntable.get('characters'):
+            for char in turntable['characters']:
+                all_turntables.append(('character', char))
+        if turntable.get('backgrounds'):
+            for bg in turntable['backgrounds']:
+                all_turntables.append(('background', bg))
+        if turntable.get('objects'):
+            for obj in turntable['objects']:
+                all_turntables.append(('object', obj))
+        
+        if all_turntables:
+            # 전체 재생성 버튼
+            if st.button("🔄 모든 턴테이블 재생성", use_container_width=True):
+                st.session_state['turntable_images'] = {}
+                st.session_state['turntable_status'] = {}
+                st.rerun()
             
-            if ref_key not in st.session_state['turntable_images']:
-                turntable_status.markdown(f"<div class='status-box'>🎨 {ref['name']} 생성 중... ({idx+1}/{total_turntables})</div>", unsafe_allow_html=True)
+            for tt_type, tt_item in all_turntables:
+                tt_key = f"{tt_type}_{tt_item['name']}"
                 
-                img, provider = try_generate_image_with_fallback(
-                    ref['turntable_prompt'],
-                    image_width,
-                    image_height,
-                    image_provider,
-                    max_retries=max_retries
-                )
-                
-                if img:
-                    st.session_state['turntable_images'][ref_key] = img
-                    st.session_state['turntable_status'][ref_key] = f"✅ 성공 ({provider})"
-                else:
-                    st.session_state['turntable_status'][ref_key] = "❌ 생성 실패"
-                
-                turntable_progress.progress((idx + 1) / total_turntables)
-                time.sleep(0.3)
-        
-        turntable_status.markdown("<div class='status-box'>✅ 레퍼런스 이미지 생성 완료!</div>", unsafe_allow_html=True)
-        time.sleep(1)
-    
-    # 2단계: 씬 이미지 생성
-    scenes = plan['scenes']
-    total_scenes = len(scenes)
-    
-    with progress_container:
-        st.markdown("#### 🎬 씬 이미지 생성")
-        scene_progress = st.progress(0)
-        scene_status = st.empty()
-    
-    for idx, scene in enumerate(scenes):
-        scene_num = scene['scene_num']
-        
-        if scene_num not in st.session_state['generated_images']:
-            scene_status.markdown(f"<div class='status-box'>🎬 Scene {scene_num} 이미지 생성 중... ({idx+1}/{total_scenes})</div>", unsafe_allow_html=True)
-            
-            full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-            
-            img, provider = try_generate_image_with_fallback(
-                full_prompt,
-                image_width,
-                image_height,
-                image_provider,
-                max_retries=max_retries
-            )
-            
-            if img:
-                st.session_state['generated_images'][scene_num] = img
-                st.session_state['image_status'][scene_num] = f"✅ 성공 ({provider})"
-            else:
-                st.session_state['image_status'][scene_num] = "❌ 생성 실패"
-            
-            scene_progress.progress((idx + 1) / total_scenes)
-            time.sleep(0.3)
-    
-    scene_status.markdown("<div class='status-box'>✅ 모든 이미지 생성 완료!</div>", unsafe_allow_html=True)
-    st.session_state['auto_generation_running'] = False
-    time.sleep(1)
-    st.rerun()
-
-# ------------------------------------------------------------------
-# 5. 결과 표시
-# ------------------------------------------------------------------
-
-if st.session_state['plan_data'] and st.session_state['prompts_generated']:
-    plan = st.session_state['plan_data']
-    
-    # 기획안 요약 표시
-    st.markdown("---")
-    st.subheader(f"🎥 {plan['project_title']}")
-    st.info(plan['logline'])
-    
-    with st.expander("📋 전체 기획안 보기", expanded=False):
-        st.markdown(f"**음악 스타일:** {plan['music']['style']}")
-        st.code(plan['music']['suno_prompt'], language="text")
-        st.markdown(f"**비주얼 스타일:** {plan['visual_style']['description']}")
-        st.code(plan['visual_style']['character_prompt'], language="text")
-    
-    # 턴테이블 레퍼런스 섹션
-    if 'turntable_references' in plan and plan['turntable_references']:
-        st.markdown("---")
-        st.markdown("### 📐 레퍼런스 이미지 (Turntable)")
-        
-        turntable_cols = st.columns(min(3, len(plan['turntable_references'])))
-        
-        for idx, ref in enumerate(plan['turntable_references']):
-            ref_key = f"{ref['type']}_{idx}"
-            col = turntable_cols[idx % 3]
-            
-            with col:
                 st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
-                st.markdown(f"**{ref['name']}** ({ref['type']})")
                 
-                if ref_key in st.session_state['turntable_images']:
-                    st.image(st.session_state['turntable_images'][ref_key], use_container_width=True)
-                    if ref_key in st.session_state['turntable_status']:
-                        st.caption(st.session_state['turntable_status'][ref_key])
+                # 헤더
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    icon = "👤" if tt_type == "character" else "🏙️" if tt_type == "background" else "📦"
+                    st.markdown(f"#### {icon} {tt_item['name']}")
+                with col2:
+                    if tt_key in st.session_state['turntable_images']:
+                        if st.button("🔄", key=f"regen_tt_{tt_key}", help="재생성"):
+                            del st.session_state['turntable_images'][tt_key]
+                            st.rerun()
+                
+                # 이미지 표시
+                if tt_key in st.session_state['turntable_images']:
+                    st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
+                    if tt_key in st.session_state['turntable_status']:
+                        st.caption(st.session_state['turntable_status'][tt_key])
                 else:
-                    if ref_key in st.session_state['turntable_status']:
-                        st.markdown(f"<div class='error-box'>{st.session_state['turntable_status'][ref_key]}</div>", unsafe_allow_html=True)
+                    if tt_key in st.session_state['turntable_status']:
+                        st.markdown(f"<div class='error-box'>{st.session_state['turntable_status'][tt_key]}</div>", unsafe_allow_html=True)
                     
-                    if st.button(f"📸 생성", key=f"gen_turntable_{idx}"):
+                    if st.button(f"📸 생성", key=f"gen_tt_{tt_key}"):
                         with st.spinner("🎨 이미지 생성 중..."):
                             img, provider = try_generate_image_with_fallback(
-                                ref['turntable_prompt'],
-                                image_width,
-                                image_height,
+                                tt_item['prompt'],
+                                1024,
+                                1024,
                                 image_provider,
                                 max_retries=max_retries
-)
-    if img:
-                            st.session_state['turntable_images'][ref_key] = img
-                            st.session_state['turntable_status'][ref_key] = f"✅ 성공 ({provider})"
-                            st.rerun()
-                        else:
-                            st.session_state['turntable_status'][ref_key] = "❌ 생성 실패"
-                            st.error("이미지 생성 실패")
-            
-            with st.expander("📝 프롬프트"):
-                st.caption(ref['description'])
-                st.code(ref['turntable_prompt'], language="text")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# 스토리보드 섹션
-st.markdown("---")
-st.markdown("### 🖼️ 스토리보드")
-
-# 전체 재생성 버튼
-col_btn1, col_btn2, col_btn3 = st.columns(3)
-with col_btn1:
-    if st.button("🔄 모든 씬 재생성", use_container_width=True):
-        st.session_state['generated_images'] = {}
-        st.session_state['image_status'] = {}
-        st.rerun()
-with col_btn2:
-    if st.button("🔄 레퍼런스 재생성", use_container_width=True):
-        st.session_state['turntable_images'] = {}
-        st.session_state['turntable_status'] = {}
-        st.rerun()
-with col_btn3:
-    if st.button("📋 프롬프트 모두 보기", use_container_width=True):
-        for scene in plan['scenes']:
-            with st.expander(f"Scene {scene['scene_num']}", expanded=True):
-                full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                st.code(full_prompt, language="text")
-
-for scene in plan['scenes']:
-    scene_num = scene['scene_num']
-    
-    st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
-    
-    # 씬 헤더
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown(f"#### Scene {scene_num} - {scene['timecode']}")
-    with col2:
-        # 개별 재생성 버튼
-        if scene_num in st.session_state['generated_images']:
-            if st.button("🔄", key=f"regen_{scene_num}", help="이미지 재생성"):
-                del st.session_state['generated_images'][scene_num]
-                st.rerun()
-    
-    # 이미지 표시
-    if scene_num in st.session_state['generated_images']:
-        st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
-        if scene_num in st.session_state['image_status']:
-            st.caption(st.session_state['image_status'][scene_num])
-    else:
-        # 실패한 경우 표시
-        if scene_num in st.session_state['image_status']:
-            st.markdown(f"<div class='error-box'>{st.session_state['image_status'][scene_num]}</div>", unsafe_allow_html=True)
+                            )
+                            
+                            if img:
+                                st.session_state['turntable_images'][tt_key] = img
+                                st.session_state['turntable_status'][tt_key] = f"✅ 성공 ({provider})"
+                                st.rerun()
+                            else:
+                                st.session_state['turntable_status'][tt_key] = "❌ 생성 실패"
+                                st.error("이미지 생성 실패")
+                
+                # 프롬프트 표시
+                with st.expander("📝 프롬프트 보기"):
+                    st.code(tt_item['prompt'], language="text")
+                
+                st.markdown("</div>", unsafe_allow_html=True)
         
-        # 수동 생성 버튼
-        if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
-            with st.spinner("🎨 이미지 생성 중..."):
-                full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                
-                img, provider = try_generate_image_with_fallback(
-                    full_prompt,
-                    image_width,
-                    image_height,
-                    image_provider,
-                    max_retries=max_retries
-                )
-                
-                if img:
-                    st.session_state['generated_images'][scene_num] = img
-                    st.session_state['image_status'][scene_num] = f"✅ 성공 ({provider})"
+        st.markdown("---")
+    
+    # 스토리보드 섹션
+    st.markdown("### 🖼️ 스토리보드")
+    
+    # 전체 재생성 버튼
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🔄 모든 씬 재생성", use_container_width=True):
+            st.session_state['generated_images'] = {}
+            st.session_state['image_status'] = {}
+            st.rerun()
+    with col_btn2:
+        if st.button("📋 프롬프트 모두 보기", use_container_width=True):
+            for scene in plan['scenes']:
+                with st.expander(f"Scene {scene['scene_num']}", expanded=True):
+                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                    st.code(full_prompt, language="text")
+
+    for scene in plan['scenes']:
+        scene_num = scene['scene_num']
+        
+        st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
+        
+        # 씬 헤더
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown(f"#### Scene {scene_num} - {scene['timecode']}")
+        with col2:
+            if scene_num in st.session_state['generated_images']:
+                if st.button("🔄", key=f"regen_{scene_num}", help="이미지 재생성"):
+                    del st.session_state['generated_images'][scene_num]
                     st.rerun()
-                else:
-                    st.session_state['image_status'][scene_num] = "❌ 생성 실패"
-                    st.error("이미지 생성 실패 - 다시 시도해주세요")
-
-    # 씬 정보
-    st.write(f"**액션:** {scene['action']}")
-    st.write(f"**카메라:** {scene['camera']}")
-    
-    with st.expander("📝 프롬프트 상세"):
-        st.markdown("**이미지 프롬프트:**")
-        full_img_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-        st.code(full_img_prompt, language="text")
-        if 'video_prompt' in scene:
-            st.markdown("**영상 프롬프트:**")
-            st.code(scene['video_prompt'], language="text")
         
-    st.markdown("</div>", unsafe_allow_html=True)
+        # 이미지 표시
+        if scene_num in st.session_state['generated_images']:
+            st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+            if scene_num in st.session_state['image_status']:
+                st.caption(st.session_state['image_status'][scene_num])
+        else:
+            if scene_num in st.session_state['image_status']:
+                st.markdown(f"<div class='error-box'>{st.session_state['image_status'][scene_num]}</div>", unsafe_allow_html=True)
+            
+            if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
+                with st.spinner("🎨 이미지 생성 중..."):
+                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                    
+                    img, provider = try_generate_image_with_fallback(
+                        full_prompt,
+                        image_width,
+                        image_height,
+                        image_provider,
+                        max_retries=max_retries
+                    )
+                    
+                    if img:
+                        st.session_state['generated_images'][scene_num] = img
+                        st.session_state['image_status'][scene_num] = f"✅ 성공 ({provider})"
+                        st.rerun()
+                    else:
+                        st.session_state['image_status'][scene_num] = "❌ 생성 실패"
+                        st.error("이미지 생성 실패")
+
+        # 씬 정보
+        st.write(f"**액션:** {scene['action']}")
+        st.write(f"**카메라:** {scene['camera']}")
+        
+        with st.expander("📝 프롬프트 상세"):
+            st.markdown("**이미지 프롬프트:**")
+            full_img_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+            st.code(full_img_prompt, language="text")
+            if 'video_prompt' in scene:
+                st.markdown("**영상 프롬프트:**")
+                st.code(scene['video_prompt'], language="text")
+            
+        st.markdown("</div>", unsafe_allow_html=True)

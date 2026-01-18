@@ -11,17 +11,12 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Mobile)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (Debug Mode)", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 스타일링 (모바일 최적화) ---
+# --- 스타일링 ---
 st.markdown("""
 <style>
-    /* 전체 여백 조정 */
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 5rem;
-    }
-    /* 씬 박스 스타일 */
+    .block-container { padding-top: 1rem; padding-bottom: 5rem; }
     .scene-box {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
@@ -31,14 +26,12 @@ st.markdown("""
         border-left: 5px solid #4285F4;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    /* 버튼 크기 키우기 (터치 용이) */
     .stButton>button {
         width: 100%;
         border-radius: 8px;
         height: 3em; 
         font-weight: bold;
     }
-    /* 수동 모드 박스 */
     .manual-box {
         background-color: #f8f9fa;
         border: 2px dashed #FFD700;
@@ -55,20 +48,13 @@ def get_api_key(key_name):
     elif os.getenv(key_name): return os.getenv(key_name)
     return None
 
-# --- 사이드바 (설정) ---
+# --- 사이드바 ---
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    # 실행 모드 선택
-    execution_mode = st.radio(
-        "실행 방식",
-        ["API 자동 실행", "수동 모드 (무제한)"],
-        index=0
-    )
-    
+    execution_mode = st.radio("실행 방식", ["API 자동 실행", "수동 모드 (무제한)"], index=0)
     st.markdown("---")
 
-    # API 모드일 때만 키 입력 받기
     gemini_key = None
     gemini_model = None
     
@@ -79,48 +65,42 @@ with st.sidebar:
         else:
             gemini_key = st.text_input("Gemini API Key", type="password")
             
-        st.caption("사용 모델")
         model_options = [
             "gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", 
             "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest"
         ]
-        gemini_model = st.selectbox("모델 선택", model_options, index=0, label_visibility="collapsed")
+        gemini_model = st.selectbox("Gemini 모델", model_options, index=0)
     
     st.markdown("---")
     
-    # HF 토큰
     hf_token = get_api_key("HF_TOKEN")
     if hf_token:
         st.success("✅ HF Token 연결됨")
     else:
         hf_token = st.text_input("Hugging Face Token", type="password")
     
-    st.caption("이미지 모델")
     hf_model_id = st.selectbox(
         "이미지 모델",
         [
-            "black-forest-labs/FLUX.1-dev",
-            "black-forest-labs/FLUX.1-schnell",
-            "stabilityai/stable-diffusion-xl-base-1.0", 
-            "runwayml/stable-diffusion-v1-5"
+            "black-forest-labs/FLUX.1-dev",     # 고화질 (Access 필요)
+            "black-forest-labs/FLUX.1-schnell", # 고속
+            "stabilityai/stable-diffusion-xl-base-1.0", # 안정적
+            "runwayml/stable-diffusion-v1-5"    # 매우 빠름
         ],
-        index=0,
-        label_visibility="collapsed"
+        index=0
     )
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
         st.rerun()
 
-# --- 메인 화면 (모바일 레이아웃) ---
+# --- 메인 화면 ---
 st.title("🎬 AI MV Director")
 
-# [모바일 최적화] 입력창과 실행 버튼을 상단에 폼(Form)으로 배치
-with st.expander("📝 프로젝트 설정 (터치하여 열기)", expanded=True):
+# 입력 폼
+with st.expander("📝 프로젝트 설정", expanded=True):
     with st.form("project_form"):
-        topic = st.text_area("영상 주제를 입력하세요", height=100, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
-        
-        # 폼 제출 버튼 (실행 버튼 역할)
+        topic = st.text_area("영상 주제", height=100, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
         submit_btn = st.form_submit_button("🚀 프로젝트 시작")
 
 # ------------------------------------------------------------------
@@ -166,7 +146,7 @@ def get_system_prompt(topic):
     """
 
 # ------------------------------------------------------------------
-# 1. API 자동 실행 로직
+# 1. API 자동 실행 로직 (Gemini)
 # ------------------------------------------------------------------
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
@@ -199,32 +179,53 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. Hugging Face 이미지 생성 로직
+# 2. [강화된] Hugging Face 이미지 생성 로직 (디버깅용)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
+    """
+    이미지 생성 함수. 실패 시 (None, 에러메시지)를 반환합니다.
+    """
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
-    payload = {"inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed", "parameters": {"seed": seed}}
+    
+    # Payload
+    payload = {
+        "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed",
+        "parameters": {"seed": seed}
+    }
 
+    # 최대 5번 시도
     for attempt in range(5):
         try:
-            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+            # 타임아웃을 60초로 넉넉하게 잡음 (모델 로딩 시간 고려)
+            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
+            
+            # 200 OK: 성공
             if response.status_code == 200:
-                return Image.open(BytesIO(response.content))
+                return Image.open(BytesIO(response.content)), None
+            
+            # 503 Service Unavailable: 모델 로딩 중 (Estimated Time)
             elif "estimated_time" in response.json():
-                wait_time = response.json().get("estimated_time", 10)
-                st.toast(f"😴 모델 깨우는 중... ({wait_time:.1f}초)")
-                time.sleep(wait_time + 1)
+                wait_time = response.json().get("estimated_time", 20)
+                st.toast(f"😴 모델 로딩 중... {wait_time:.1f}초 대기 ({attempt+1}/5)")
+                time.sleep(wait_time + 2) # 여유 있게 대기
                 continue
+            
+            # 그 외 에러 (403, 500 등)
             else:
-                break
+                return None, f"Error {response.status_code}: {response.text}"
+                
         except Exception as e:
             time.sleep(1)
-    return None
+            # 마지막 시도였다면 에러 리턴
+            if attempt == 4:
+                return None, str(e)
+            
+    return None, "시간 초과: 모델이 응답하지 않습니다."
 
 # ------------------------------------------------------------------
-# 3. 메인 실행 로직 (Form Submit 처리)
+# 3. 메인 실행 로직
 # ------------------------------------------------------------------
 
 if 'plan_data' not in st.session_state:
@@ -232,7 +233,7 @@ if 'plan_data' not in st.session_state:
 if 'generated_images' not in st.session_state:
     st.session_state['generated_images'] = {} 
 
-# A. 실행 버튼 클릭 시 (Auto 모드)
+# A. 실행 (API Auto Mode)
 if submit_btn and execution_mode == "API 자동 실행":
     if not gemini_key or not topic:
         st.warning("API Key와 주제를 입력해주세요.")
@@ -248,20 +249,16 @@ if submit_btn and execution_mode == "API 자동 실행":
             else:
                 status.update(label="실패", state="error")
 
-# B. 수동 모드 UI (Form 밖에서 처리)
+# B. 실행 (Manual Mode)
 if execution_mode == "수동 모드 (무제한)":
     st.info("💡 주제를 입력한 후 아래 단계를 따라주세요.")
-    
     prompt_to_copy = get_system_prompt(topic) if topic else "주제를 먼저 입력해주세요."
     
     with st.container():
         st.markdown(f"<div class='manual-box'>", unsafe_allow_html=True)
         st.markdown("**1. 프롬프트 복사**")
         st.code(prompt_to_copy, language="text")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.link_button("🚀 Gemini 열기", "https://gemini.google.com/", use_container_width=True)
+        st.link_button("🚀 Gemini 열기", "https://gemini.google.com/", use_container_width=True)
         
         st.markdown("**2. 결과 붙여넣기**")
         manual_json_input = st.text_area("JSON 결과", height=150, placeholder="```json\n{\n ... \n}\n```", label_visibility="collapsed")
@@ -277,7 +274,6 @@ if execution_mode == "수동 모드 (무제한)":
                 except Exception as e:
                     st.error(f"오류: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
-
 
 # ------------------------------------------------------------------
 # 4. 결과 표시
@@ -304,27 +300,30 @@ if st.session_state['plan_data']:
         st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
         st.markdown(f"#### Scene {scene_num}")
         
-        # 모바일에서는 이미지를 위에, 텍스트를 아래에 두는 것이 보기 좋음
         if scene_num in st.session_state['generated_images']:
             st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
         else:
-            # 아직 이미지 없을 때 (버튼 표시)
             if hf_token:
                 if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
-                    with st.spinner("생성 중..."):
+                    with st.spinner(f"생성 중... ({hf_model_id})"):
                         full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                        img = generate_image_hf(full_prompt, hf_token, hf_model_id)
+                        
+                        # [중요] 에러 메시지까지 받음
+                        img, err_msg = generate_image_hf(full_prompt, hf_token, hf_model_id)
+                        
                         if img:
                             st.session_state['generated_images'][scene_num] = img
                             st.rerun()
                         else:
-                            st.error("실패")
+                            st.error(f"실패 원인: {err_msg}")
+                            # 403 에러면 친절하게 알려줌
+                            if "403" in str(err_msg):
+                                st.warning("⚠️ HF 사이트에서 약관 동의(Accept License)를 했는지 확인하세요. 동의 후에도 안 되면 토큰을 재발급(Fine-grained 말고 Legacy Write 권한 추천) 받아보세요.")
             else:
                 st.warning("HF 토큰 필요")
 
         st.caption(f"⏱️ {scene['timecode']}")
         st.write(f"**Action:** {scene['action']}")
-        st.write(f"**Camera:** {scene['camera']}")
         
         with st.expander("Prompt"):
             st.code(scene['image_prompt'], language="text")

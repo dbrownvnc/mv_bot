@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Robust)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (SDXL)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -79,16 +79,19 @@ with st.sidebar:
     else:
         hf_token = st.text_input("Hugging Face Token", type="password")
     
+    # [중요] 기본 모델을 SDXL(index=0)로 변경하여 에러 방지
     hf_model_id = st.selectbox(
         "이미지 모델",
         [
-            "black-forest-labs/FLUX.1-dev",     # 고화질 (Access 필요)
-            "black-forest-labs/FLUX.1-schnell", # 고속
-            "stabilityai/stable-diffusion-xl-base-1.0", # 안정적
-            "runwayml/stable-diffusion-v1-5"    # 매우 빠름
+            "stabilityai/stable-diffusion-xl-base-1.0", # [추천] 무료 API에서 가장 안정적
+            "runwayml/stable-diffusion-v1-5",    # 매우 빠름
+            "black-forest-labs/FLUX.1-dev",     # (주의) 무료 API에서 막혔을 확률 높음
+            "black-forest-labs/FLUX.1-schnell"
         ],
         index=0
     )
+    if "FLUX" in hf_model_id:
+        st.caption("⚠️ FLUX 모델은 무료 API에서 404/410 에러가 날 수 있습니다.")
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -187,11 +190,11 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. [완벽 수정] Hugging Face 이미지 생성 (JSON 에러 방지)
+# 2. [수정 완료] Hugging Face 이미지 생성 (URL 원복 & 에러처리)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
-    # API URL 변경 (router.huggingface.co)
-    api_url = f"https://router.huggingface.co/models/{model_id}"
+    # [FIX] 표준 API 주소로 복귀 (SDXL은 여기서 잘 됨)
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
@@ -209,12 +212,10 @@ def generate_image_hf(prompt, token, model_id):
             if response.status_code == 200:
                 return Image.open(BytesIO(response.content)), None
             
-            # 에러 발생 시 처리 (여기가 핵심 수정 부분)
+            # 에러 발생 시 처리
             else:
                 try:
-                    # JSON 응답 시도
                     err_json = response.json()
-                    
                     # 503: 모델 로딩 중
                     if "estimated_time" in err_json:
                         wait_time = err_json.get("estimated_time", 20)
@@ -222,11 +223,9 @@ def generate_image_hf(prompt, token, model_id):
                         time.sleep(wait_time + 2)
                         continue
                     
-                    # 그 외 JSON 에러 메시지
                     return None, f"API Error: {err_json}"
                     
                 except json.JSONDecodeError:
-                    # [핵심] JSON이 아님 (HTML 등) -> raw text 반환
                     return None, f"Server Error ({response.status_code}): {response.text[:200]}..."
                 
         except Exception as e:
@@ -327,9 +326,6 @@ if st.session_state['plan_data']:
                             st.rerun()
                         else:
                             st.error(f"실패 원인: {err_msg}")
-                            # 403 가이드
-                            if "403" in str(err_msg):
-                                st.warning("⚠️ HF 사이트에서 약관 동의(Accept License)를 했는지 확인하세요.")
             else:
                 st.warning("HF 토큰 필요")
 

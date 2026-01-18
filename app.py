@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Debug Mode)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (Router API)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -179,13 +179,16 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. [강화된] Hugging Face 이미지 생성 로직 (디버깅용)
+# 2. [수정 완료] Hugging Face 이미지 생성 로직 (URL 변경)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
     """
     이미지 생성 함수. 실패 시 (None, 에러메시지)를 반환합니다.
+    URL이 'router.huggingface.co'로 업데이트되었습니다.
     """
-    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    # [FIX] 410 에러 해결을 위해 URL 변경
+    api_url = f"https://router.huggingface.co/models/{model_id}"
+    
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
     
@@ -318,7 +321,7 @@ if st.session_state['plan_data']:
                             st.error(f"실패 원인: {err_msg}")
                             # 403 에러면 친절하게 알려줌
                             if "403" in str(err_msg):
-                                st.warning("⚠️ HF 사이트에서 약관 동의(Accept License)를 했는지 확인하세요. 동의 후에도 안 되면 토큰을 재발급(Fine-grained 말고 Legacy Write 권한 추천) 받아보세요.")
+                                st.warning("⚠️ HF 사이트에서 약관 동의(Accept License)를 했는지 확인하세요.")
             else:
                 st.warning("HF 토큰 필요")
 

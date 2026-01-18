@@ -16,12 +16,10 @@ st.set_page_config(page_title="AI MV Director (Mobile)", layout="wide", initial_
 # --- 스타일링 (모바일 최적화) ---
 st.markdown("""
 <style>
-    /* 전체 여백 조정 */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 5rem;
     }
-    /* 씬 박스 스타일 */
     .scene-box {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
@@ -31,14 +29,12 @@ st.markdown("""
         border-left: 5px solid #4285F4;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    /* 버튼 크기 키우기 (터치 용이) */
     .stButton>button {
         width: 100%;
         border-radius: 8px;
         height: 3em; 
         font-weight: bold;
     }
-    /* 수동 모드 박스 */
     .manual-box {
         background-color: #f8f9fa;
         border: 2px dashed #FFD700;
@@ -88,39 +84,62 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # HF 토큰
-    hf_token = get_api_key("HF_TOKEN")
-    if hf_token:
-        st.success("✅ HF Token 연결됨")
-    else:
-        hf_token = st.text_input("Hugging Face Token", type="password")
+    # 이미지 생성 설정
+    st.subheader("🎨 이미지 생성 설정")
     
-    st.caption("이미지 모델")
-    hf_model_id = st.selectbox(
-        "이미지 모델",
-        [
-            "black-forest-labs/FLUX.1-dev",
-            "black-forest-labs/FLUX.1-schnell",
-            "stabilityai/stable-diffusion-xl-base-1.0", 
-            "runwayml/stable-diffusion-v1-5"
-        ],
-        index=0,
-        label_visibility="collapsed"
+    image_provider = st.selectbox(
+        "이미지 생성 제공자",
+        ["Pollinations AI (무료)", "Hugging Face"],
+        index=0
     )
+    
+    if image_provider == "Pollinations AI (무료)":
+        pollinations_model = st.selectbox(
+            "Pollinations 모델",
+            [
+                "flux",
+                "flux-realism", 
+                "flux-anime",
+                "flux-3d",
+                "turbo",
+                "flux-pro"
+            ],
+            index=0
+        )
+        st.caption("✨ Pollinations는 무료이며 API 키가 필요없습니다")
+        
+        # 이미지 품질 설정
+        image_width = st.slider("이미지 너비", 512, 2048, 1024, 128)
+        image_height = st.slider("이미지 높이", 512, 2048, 1024, 128)
+        
+    else:  # Hugging Face
+        hf_token = get_api_key("HF_TOKEN")
+        if hf_token:
+            st.success("✅ HF Token 연결됨")
+        else:
+            hf_token = st.text_input("Hugging Face Token", type="password")
+        
+        hf_model_id = st.selectbox(
+            "HF 이미지 모델",
+            [
+                "black-forest-labs/FLUX.1-dev",
+                "black-forest-labs/FLUX.1-schnell",
+                "stabilityai/stable-diffusion-xl-base-1.0", 
+                "runwayml/stable-diffusion-v1-5"
+            ],
+            index=0
+        )
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
         st.rerun()
 
-# --- 메인 화면 (모바일 레이아웃) ---
+# --- 메인 화면 ---
 st.title("🎬 AI MV Director")
 
-# [모바일 최적화] 입력창과 실행 버튼을 상단에 폼(Form)으로 배치
 with st.expander("📝 프로젝트 설정 (터치하여 열기)", expanded=True):
     with st.form("project_form"):
         topic = st.text_area("영상 주제를 입력하세요", height=100, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
-        
-        # 폼 제출 버튼 (실행 버튼 역할)
         submit_btn = st.form_submit_button("🚀 프로젝트 시작")
 
 # ------------------------------------------------------------------
@@ -199,13 +218,50 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. Hugging Face 이미지 생성 로직
+# 2. 향상된 이미지 생성 로직
 # ------------------------------------------------------------------
+
+def generate_image_pollinations(prompt, model="flux", width=1024, height=1024, seed=None):
+    """
+    Pollinations AI를 사용한 이미지 생성 (무료, API 키 불필요)
+    """
+    try:
+        if seed is None:
+            seed = random.randint(0, 999999)
+        
+        # 프롬프트 최적화
+        enhanced_prompt = f"{prompt}, cinematic lighting, 8k, high quality, detailed, professional photography"
+        
+        # URL 인코딩
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        
+        # Pollinations API URL
+        api_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model={model}&width={width}&height={height}&seed={seed}&nologo=true"
+        
+        # 이미지 다운로드
+        response = requests.get(api_url, timeout=60)
+        
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content))
+        else:
+            st.error(f"Pollinations API 오류: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        st.error(f"이미지 생성 실패: {e}")
+        return None
+
 def generate_image_hf(prompt, token, model_id):
+    """
+    Hugging Face를 사용한 이미지 생성
+    """
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {token}"}
     seed = random.randint(0, 999999) 
-    payload = {"inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed", "parameters": {"seed": seed}}
+    payload = {
+        "inputs": f"{prompt}, cinematic lighting, 8k, high quality, detailed", 
+        "parameters": {"seed": seed}
+    }
 
     for attempt in range(5):
         try:
@@ -224,7 +280,7 @@ def generate_image_hf(prompt, token, model_id):
     return None
 
 # ------------------------------------------------------------------
-# 3. 메인 실행 로직 (Form Submit 처리)
+# 3. 메인 실행 로직
 # ------------------------------------------------------------------
 
 if 'plan_data' not in st.session_state:
@@ -236,8 +292,6 @@ if 'generated_images' not in st.session_state:
 if submit_btn and execution_mode == "API 자동 실행":
     if not gemini_key or not topic:
         st.warning("API Key와 주제를 입력해주세요.")
-    elif not hf_token:
-        st.warning("Hugging Face Token이 필요합니다.")
     else:
         st.session_state['generated_images'] = {} 
         st.session_state['plan_data'] = None
@@ -248,7 +302,7 @@ if submit_btn and execution_mode == "API 자동 실행":
             else:
                 status.update(label="실패", state="error")
 
-# B. 수동 모드 UI (Form 밖에서 처리)
+# B. 수동 모드 UI
 if execution_mode == "수동 모드 (무제한)":
     st.info("💡 주제를 입력한 후 아래 단계를 따라주세요.")
     
@@ -278,7 +332,6 @@ if execution_mode == "수동 모드 (무제한)":
                     st.error(f"오류: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-
 # ------------------------------------------------------------------
 # 4. 결과 표시
 # ------------------------------------------------------------------
@@ -304,23 +357,33 @@ if st.session_state['plan_data']:
         st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
         st.markdown(f"#### Scene {scene_num}")
         
-        # 모바일에서는 이미지를 위에, 텍스트를 아래에 두는 것이 보기 좋음
         if scene_num in st.session_state['generated_images']:
             st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
         else:
-            # 아직 이미지 없을 때 (버튼 표시)
-            if hf_token:
-                if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
-                    with st.spinner("생성 중..."):
-                        full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
-                        img = generate_image_hf(full_prompt, hf_token, hf_model_id)
-                        if img:
-                            st.session_state['generated_images'][scene_num] = img
-                            st.rerun()
+            # 이미지 생성 버튼
+            if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
+                with st.spinner("🎨 이미지 생성 중..."):
+                    full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                    
+                    img = None
+                    if image_provider == "Pollinations AI (무료)":
+                        img = generate_image_pollinations(
+                            full_prompt, 
+                            model=pollinations_model,
+                            width=image_width,
+                            height=image_height
+                        )
+                    else:  # Hugging Face
+                        if 'hf_token' in locals() and hf_token:
+                            img = generate_image_hf(full_prompt, hf_token, hf_model_id)
                         else:
-                            st.error("실패")
-            else:
-                st.warning("HF 토큰 필요")
+                            st.error("HF 토큰이 필요합니다.")
+                    
+                    if img:
+                        st.session_state['generated_images'][scene_num] = img
+                        st.rerun()
+                    else:
+                        st.error("이미지 생성 실패")
 
         st.caption(f"⏱️ {scene['timecode']}")
         st.write(f"**Action:** {scene['action']}")

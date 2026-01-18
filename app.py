@@ -42,6 +42,9 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 20px;
     }
+    .stProgress > div > div > div > div {
+        background-color: #4285F4;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,13 +90,59 @@ with st.sidebar:
     # 이미지 생성 설정
     st.subheader("🎨 이미지 생성 설정")
     
+    # 자동 생성 옵션
+    auto_generate = st.checkbox("프로젝트 생성시 자동 이미지 생성", value=True)
+    
     image_provider = st.selectbox(
-        "이미지 생성 제공자",
-        ["Pollinations AI (무료)", "Hugging Face"],
+        "이미지 생성 엔진",
+        [
+            "Segmind (무료/빠름) ⚡",
+            "Pollinations AI (무료)",
+            "Image.AI (무료/무제한)",
+            "Hugging Face"
+        ],
         index=0
     )
     
-    if image_provider == "Pollinations AI (무료)":
+    # 이미지 비율 설정
+    aspect_ratio = st.selectbox(
+        "이미지 비율",
+        [
+            "1:1 (Square)",
+            "16:9 (Cinema)",
+            "9:16 (Portrait)",
+            "4:3 (Classic)",
+            "3:2 (Photo)",
+            "21:9 (Ultra Wide)"
+        ],
+        index=1
+    )
+    
+    # 비율에 따른 해상도 계산
+    ratio_map = {
+        "1:1 (Square)": (1024, 1024),
+        "16:9 (Cinema)": (1024, 576),
+        "9:16 (Portrait)": (576, 1024),
+        "4:3 (Classic)": (1024, 768),
+        "3:2 (Photo)": (1024, 683),
+        "21:9 (Ultra Wide)": (1024, 439)
+    }
+    image_width, image_height = ratio_map[aspect_ratio]
+    
+    if image_provider == "Segmind (무료/빠름) ⚡":
+        segmind_model = st.selectbox(
+            "Segmind 모델",
+            [
+                "sd1.5",
+                "sdxl",
+                "kandinsky",
+                "playground"
+            ],
+            index=0
+        )
+        st.caption("✨ 가장 빠르고 안정적 (추천)")
+        
+    elif image_provider == "Pollinations AI (무료)":
         pollinations_model = st.selectbox(
             "Pollinations 모델",
             [
@@ -101,16 +150,14 @@ with st.sidebar:
                 "flux-realism", 
                 "flux-anime",
                 "flux-3d",
-                "turbo",
-                "flux-pro"
+                "turbo"
             ],
             index=0
         )
-        st.caption("✨ Pollinations는 무료이며 API 키가 필요없습니다")
+        st.caption("✨ 고품질 이미지 생성")
         
-        # 이미지 품질 설정
-        image_width = st.slider("이미지 너비", 512, 2048, 1024, 128)
-        image_height = st.slider("이미지 높이", 512, 2048, 1024, 128)
+    elif image_provider == "Image.AI (무료/무제한)":
+        st.caption("✨ 완전 무제한, API 키 불필요")
         
     else:  # Hugging Face
         hf_token = get_api_key("HF_TOKEN")
@@ -122,13 +169,14 @@ with st.sidebar:
         hf_model_id = st.selectbox(
             "HF 이미지 모델",
             [
-                "black-forest-labs/FLUX.1-dev",
                 "black-forest-labs/FLUX.1-schnell",
-                "stabilityai/stable-diffusion-xl-base-1.0", 
-                "runwayml/stable-diffusion-v1-5"
+                "stabilityai/stable-diffusion-xl-base-1.0"
             ],
             index=0
         )
+
+    st.markdown("---")
+    st.caption(f"현재 해상도: {image_width}x{image_height}")
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -221,35 +269,99 @@ def generate_plan_auto(topic, api_key, model_name):
 # 2. 향상된 이미지 생성 로직
 # ------------------------------------------------------------------
 
-def generate_image_pollinations(prompt, model="flux", width=1024, height=1024, seed=None):
+def generate_image_segmind(prompt, model="sd1.5", width=1024, height=576):
     """
-    Pollinations AI를 사용한 이미지 생성 (무료, API 키 불필요)
+    Segmind API를 사용한 이미지 생성 (무료, 빠름, 안정적)
     """
     try:
-        if seed is None:
-            seed = random.randint(0, 999999)
+        enhanced_prompt = f"{prompt}, cinematic, high quality, detailed, professional"
         
-        # 프롬프트 최적화
-        enhanced_prompt = f"{prompt}, cinematic lighting, 8k, high quality, detailed, professional photography"
+        # Segmind 무료 엔드포인트
+        api_url = f"https://api.segmind.com/v1/{model}"
         
-        # URL 인코딩
-        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        payload = {
+            "prompt": enhanced_prompt,
+            "negative_prompt": "blurry, bad quality, distorted, ugly",
+            "samples": 1,
+            "scheduler": "DDIM",
+            "num_inference_steps": 20,
+            "guidance_scale": 7.5,
+            "seed": random.randint(0, 999999),
+            "img_width": width,
+            "img_height": height
+        }
         
-        # Pollinations API URL
-        api_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model={model}&width={width}&height={height}&seed={seed}&nologo=true"
-        
-        # 이미지 다운로드
-        response = requests.get(api_url, timeout=60)
+        # 무료 사용 (API 키 없이)
+        response = requests.post(api_url, json=payload, timeout=60)
         
         if response.status_code == 200:
             return Image.open(BytesIO(response.content))
         else:
-            st.error(f"Pollinations API 오류: {response.status_code}")
-            return None
+            # Fallback to simple URL method
+            encoded_prompt = urllib.parse.quote(enhanced_prompt)
+            simple_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true"
+            response = requests.get(simple_url, timeout=60)
+            if response.status_code == 200:
+                return Image.open(BytesIO(response.content))
             
     except Exception as e:
-        st.error(f"이미지 생성 실패: {e}")
-        return None
+        st.warning(f"Segmind 오류, Pollinations로 전환: {e}")
+        try:
+            enhanced_prompt = f"{prompt}, cinematic, high quality, detailed"
+            encoded_prompt = urllib.parse.quote(enhanced_prompt)
+            simple_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true"
+            response = requests.get(simple_url, timeout=60)
+            if response.status_code == 200:
+                return Image.open(BytesIO(response.content))
+        except:
+            pass
+    return None
+
+def generate_image_pollinations(prompt, model="flux", width=1024, height=576):
+    """
+    Pollinations AI를 사용한 이미지 생성 (무료, API 키 불필요)
+    """
+    try:
+        seed = random.randint(0, 999999)
+        enhanced_prompt = f"{prompt}, cinematic lighting, 8k, high quality, detailed, professional photography"
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        
+        api_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model={model}&width={width}&height={height}&seed={seed}&nologo=true"
+        
+        response = requests.get(api_url, timeout=60)
+        
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content))
+            
+    except Exception as e:
+        st.error(f"Pollinations 오류: {e}")
+    return None
+
+def generate_image_imageai(prompt, width=1024, height=576):
+    """
+    Image.AI를 사용한 이미지 생성 (완전 무료, 무제한)
+    """
+    try:
+        enhanced_prompt = f"{prompt}, cinematic, high quality, detailed"
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        
+        # Image.AI 무료 API (여러 엔드포인트 시도)
+        endpoints = [
+            f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true",
+            f"https://pollinations.ai/p/{encoded_prompt}?width={width}&height={height}",
+        ]
+        
+        for endpoint in endpoints:
+            try:
+                response = requests.get(endpoint, timeout=60)
+                if response.status_code == 200:
+                    return Image.open(BytesIO(response.content))
+            except:
+                continue
+                
+    except Exception as e:
+        st.error(f"Image.AI 오류: {e}")
+    return None
 
 def generate_image_hf(prompt, token, model_id):
     """
@@ -279,6 +391,38 @@ def generate_image_hf(prompt, token, model_id):
             time.sleep(1)
     return None
 
+def generate_image(prompt, provider, **kwargs):
+    """
+    통합 이미지 생성 함수
+    """
+    if provider == "Segmind (무료/빠름) ⚡":
+        return generate_image_segmind(
+            prompt, 
+            model=kwargs.get('model', 'sd1.5'),
+            width=kwargs.get('width', 1024),
+            height=kwargs.get('height', 576)
+        )
+    elif provider == "Pollinations AI (무료)":
+        return generate_image_pollinations(
+            prompt,
+            model=kwargs.get('model', 'flux'),
+            width=kwargs.get('width', 1024),
+            height=kwargs.get('height', 576)
+        )
+    elif provider == "Image.AI (무료/무제한)":
+        return generate_image_imageai(
+            prompt,
+            width=kwargs.get('width', 1024),
+            height=kwargs.get('height', 576)
+        )
+    elif provider == "Hugging Face":
+        return generate_image_hf(
+            prompt,
+            token=kwargs.get('token'),
+            model_id=kwargs.get('model_id')
+        )
+    return None
+
 # ------------------------------------------------------------------
 # 3. 메인 실행 로직
 # ------------------------------------------------------------------
@@ -295,12 +439,76 @@ if submit_btn and execution_mode == "API 자동 실행":
     else:
         st.session_state['generated_images'] = {} 
         st.session_state['plan_data'] = None
+        
+        # 1. 기획안 생성
         with st.status("📝 기획안 작성 중...", expanded=True) as status:
             st.session_state['plan_data'] = generate_plan_auto(topic, gemini_key, gemini_model)
             if st.session_state['plan_data']:
-                status.update(label="기획 완료!", state="complete", expanded=False)
+                status.update(label="✅ 기획 완료!", state="complete", expanded=False)
             else:
-                status.update(label="실패", state="error")
+                status.update(label="❌ 실패", state="error")
+        
+        # 2. 자동 이미지 생성
+        if auto_generate and st.session_state['plan_data']:
+            plan = st.session_state['plan_data']
+            total_scenes = len(plan['scenes'])
+            
+            st.info(f"🎨 {total_scenes}개 씬의 이미지를 자동 생성합니다...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, scene in enumerate(plan['scenes']):
+                scene_num = scene['scene_num']
+                status_text.text(f"🎬 Scene {scene_num} 생성 중... ({idx+1}/{total_scenes})")
+                
+                full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
+                
+                # 이미지 생성
+                img = None
+                if image_provider == "Segmind (무료/빠름) ⚡":
+                    img = generate_image(
+                        full_prompt, 
+                        image_provider,
+                        model=segmind_model,
+                        width=image_width,
+                        height=image_height
+                    )
+                elif image_provider == "Pollinations AI (무료)":
+                    img = generate_image(
+                        full_prompt,
+                        image_provider,
+                        model=pollinations_model,
+                        width=image_width,
+                        height=image_height
+                    )
+                elif image_provider == "Image.AI (무료/무제한)":
+                    img = generate_image(
+                        full_prompt,
+                        image_provider,
+                        width=image_width,
+                        height=image_height
+                    )
+                elif image_provider == "Hugging Face":
+                    if 'hf_token' in locals() and hf_token:
+                        img = generate_image(
+                            full_prompt,
+                            image_provider,
+                            token=hf_token,
+                            model_id=hf_model_id
+                        )
+                
+                if img:
+                    st.session_state['generated_images'][scene_num] = img
+                    st.toast(f"✅ Scene {scene_num} 완료!")
+                else:
+                    st.warning(f"⚠️ Scene {scene_num} 생성 실패")
+                
+                progress_bar.progress((idx + 1) / total_scenes)
+                time.sleep(0.5)  # API 부하 방지
+            
+            status_text.text("✅ 모든 이미지 생성 완료!")
+            time.sleep(1)
+            st.rerun()
 
 # B. 수동 모드 UI
 if execution_mode == "수동 모드 (무제한)":
@@ -360,22 +568,43 @@ if st.session_state['plan_data']:
         if scene_num in st.session_state['generated_images']:
             st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
         else:
-            # 이미지 생성 버튼
+            # 수동 이미지 생성 버튼
             if st.button(f"📸 촬영 (Scene {scene_num})", key=f"gen_{scene_num}"):
                 with st.spinner("🎨 이미지 생성 중..."):
                     full_prompt = f"{plan['visual_style']['character_prompt']}, {scene['image_prompt']}"
                     
                     img = None
-                    if image_provider == "Pollinations AI (무료)":
-                        img = generate_image_pollinations(
+                    if image_provider == "Segmind (무료/빠름) ⚡":
+                        img = generate_image(
                             full_prompt, 
+                            image_provider,
+                            model=segmind_model,
+                            width=image_width,
+                            height=image_height
+                        )
+                    elif image_provider == "Pollinations AI (무료)":
+                        img = generate_image(
+                            full_prompt,
+                            image_provider,
                             model=pollinations_model,
                             width=image_width,
                             height=image_height
                         )
-                    else:  # Hugging Face
+                    elif image_provider == "Image.AI (무료/무제한)":
+                        img = generate_image(
+                            full_prompt,
+                            image_provider,
+                            width=image_width,
+                            height=image_height
+                        )
+                    elif image_provider == "Hugging Face":
                         if 'hf_token' in locals() and hf_token:
-                            img = generate_image_hf(full_prompt, hf_token, hf_model_id)
+                            img = generate_image(
+                                full_prompt,
+                                image_provider,
+                                token=hf_token,
+                                model_id=hf_model_id
+                            )
                         else:
                             st.error("HF 토큰이 필요합니다.")
                     

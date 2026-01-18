@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director (Final Fix)", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director (Router+SDXL)", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
@@ -79,13 +79,13 @@ with st.sidebar:
     else:
         hf_token = st.text_input("Hugging Face Token", type="password")
     
-    # [중요] 모델 선택: SDXL을 기본값으로 설정
+    # [핵심 수정] SDXL을 기본값(index=0)으로 강제 설정
     hf_model_id = st.selectbox(
         "이미지 모델",
         [
-            "stabilityai/stable-diffusion-xl-base-1.0", # [강력 추천] 무료 서버에서 가장 안정적
-            "runwayml/stable-diffusion-v1-5",    # 매우 빠름 (저화질)
-            "black-forest-labs/FLUX.1-dev",     # (주의) 무료 서버 지원 중단 가능성 높음
+            "stabilityai/stable-diffusion-xl-base-1.0", # [정답] 라우터에서 가장 잘 됨
+            "runwayml/stable-diffusion-v1-5",    # [백업] 화질은 낮지만 빠름
+            "black-forest-labs/FLUX.1-dev",     # [주의] 무료 서버에서 404/403 자주 뜸
         ],
         index=0
     )
@@ -187,10 +187,10 @@ def generate_plan_auto(topic, api_key, model_name):
         return None
 
 # ------------------------------------------------------------------
-# 2. [최종 수정] Hugging Face 이미지 생성 (Router URL + 에러처리)
+# 2. [최종 수정] Hugging Face 이미지 생성 (Router + 에러 시각화)
 # ------------------------------------------------------------------
 def generate_image_hf(prompt, token, model_id):
-    # [FIX] 에러 메시지에 따라 'router' 주소 사용
+    # [FIX] api-inference 대신 router 사용 (410 에러 해결)
     api_url = f"https://router.huggingface.co/models/{model_id}"
     
     headers = {"Authorization": f"Bearer {token}"}
@@ -220,11 +220,11 @@ def generate_image_hf(prompt, token, model_id):
                         time.sleep(wait_time + 2)
                         continue
                     
-                    return None, f"API Error: {err_json}"
+                    return None, f"API Error ({response.status_code}): {err_json}"
                     
                 except json.JSONDecodeError:
-                    # JSON 아님 (HTML 등)
-                    return None, f"Server Error ({response.status_code}): {response.text[:200]}..."
+                    # JSON이 아님 (404 Not Found HTML 등)
+                    return None, f"Server Error ({response.status_code}): 주소/모델 확인 필요. ({api_url})"
                 
         except Exception as e:
             time.sleep(1)
@@ -323,7 +323,9 @@ if st.session_state['plan_data']:
                             st.session_state['generated_images'][scene_num] = img
                             st.rerun()
                         else:
-                            st.error(f"실패 원인: {err_msg}")
+                            st.error(f"실패: {err_msg}")
+                            if "404" in str(err_msg):
+                                st.warning("⚠️ 선택한 모델이 라우터에 없습니다. 'stable-diffusion-xl-base-1.0'을 사용하세요.")
             else:
                 st.warning("HF 토큰 필요")
 

@@ -652,8 +652,9 @@ if st.session_state['plan_data'] and st.session_state['prompts_generated']:
                                 image_width,
                                 image_height,
                                 image_provider,
-                                max_ret
-  if img:
+                                max_retries=max_retries
+)
+    if img:
                             st.session_state['turntable_images'][ref_key] = img
                             st.session_state['turntable_status'][ref_key] = f"✅ 성공 ({provider})"
                             st.rerun()

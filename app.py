@@ -126,7 +126,6 @@ def generate_trending_topic():
     templates = [
         "{character} experiencing {emotion} in a {setting} during {time}, {aesthetic} style, {action}",
         "{emotion} journey of a {character} in {setting}, {aesthetic} vibes, {trend}",
-        "{action} through a {setting} at {time}, feeling {emotion}, {aesthetic} aesthetic",
     ]
     template = random.choice(templates)
     return template.format(
@@ -203,6 +202,10 @@ ratio_map = {
 
 if 'scene_count' not in st.session_state:
     st.session_state.scene_count = 8
+if 'total_duration' not in st.session_state:
+    st.session_state.total_duration = 60
+if 'seconds_per_scene' not in st.session_state:
+    st.session_state.seconds_per_scene = 5
 if 'random_topic' not in st.session_state:
     st.session_state.random_topic = ""
 if 'plan_data' not in st.session_state:
@@ -234,10 +237,10 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     st.markdown("</div>", unsafe_allow_html=True)
     
     with st.form("project_form"):
-        topic = st.text_area("영상 주제", height=100, value=st.session_state.random_topic, placeholder="주제 입력 또는 위 버튼 사용")
+        topic = st.text_area("영상 주제", height=100, value=st.session_state.random_topic, placeholder="주제 입력")
         
         st.markdown("---")
-        use_json_profiles = st.checkbox("🎯 JSON 프로필 사용 (극도 디테일)", value=True, help="100번 생성해도 똑같은 결과를 위한 초정밀 프로필")
+        use_json_profiles = st.checkbox("🎯 JSON 프로필 사용 (극도 디테일)", value=True)
         st.markdown("---")
         
         col_g1, col_g2, col_g3 = st.columns(3)
@@ -252,8 +255,26 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         with col1:
             aspect_ratio = st.selectbox("🎞️ 비율", ["16:9 (Cinema)", "9:16 (Portrait)", "1:1 (Square)"], index=0)
             image_width, image_height = ratio_map[aspect_ratio]
+        
         with col2:
+            duration_mode = st.radio("⏱️ 런닝타임 설정", ["총 런닝타임", "씬 개수"], horizontal=True)
+        
+        if duration_mode == "총 런닝타임":
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=300, value=st.session_state.total_duration, step=10)
+            with col_d2:
+                seconds_per_scene = st.slider("컷당 길이 (초)", 3, 15, st.session_state.seconds_per_scene)
+            
+            scene_count = max(1, int(total_duration / seconds_per_scene))
+            st.caption(f"→ 총 **{scene_count}개** 씬 생성")
+            
+            st.session_state.scene_count = scene_count
+            st.session_state.total_duration = total_duration
+            st.session_state.seconds_per_scene = seconds_per_scene
+        else:
             scene_count = st.number_input("씬 개수", min_value=2, max_value=30, value=st.session_state.scene_count, step=1)
+            st.session_state.scene_count = scene_count
         
         st.markdown("**📖 스토리**")
         cols = st.columns(4)
@@ -291,6 +312,20 @@ def clean_json_text(text):
     text = re.sub(r'//.*?\n', '\n', text)
     return text
 
+def get_visual_style_emphasis(visual_style):
+    """비주얼 스타일별 강조 프롬프트"""
+    style_map = {
+        "Photorealistic/Cinematic": "ULTRA REALISTIC, photorealistic, cinematic photography, shot on RED camera, 8K resolution, natural lighting, professional color grading, film grain, shallow depth of field, bokeh, lifelike textures, hyperrealistic details, actual human skin texture, real world materials, physically accurate lighting",
+        "Anime/Manga": "anime style, manga illustration, cel-shaded, vibrant anime colors, expressive anime eyes, clean linework, anime aesthetic",
+        "3D Animation": "3D rendered, Pixar style, CGI animation, smooth gradients, 3D modeling, ray-traced lighting",
+        "2D Animation": "2D animation, hand-drawn style, traditional animation, painted backgrounds",
+        "Watercolor": "watercolor painting, soft edges, color bleeding, paper texture, aquarelle",
+        "Oil Painting": "oil painting, thick brushstrokes, canvas texture, classical painting technique",
+        "Cyberpunk Neon": "cyberpunk, neon lights, synthwave, futuristic, glowing elements, dark with bright accents",
+        "Dark Fantasy": "dark fantasy, gothic, moody atmosphere, dramatic shadows, mysterious lighting",
+    }
+    return style_map.get(visual_style, visual_style)
+
 def get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json_profiles):
     story_elements = []
     if options.get('use_arc'): story_elements.append("story arc")
@@ -301,109 +336,153 @@ def get_system_prompt(topic, scene_count, options, genre, visual_style, music_ge
     
     story_instruction = ", ".join(story_elements) if story_elements else "cinematic"
     
+    # 비주얼 스타일 강조
+    visual_emphasis = get_visual_style_emphasis(visual_style)
+    
     json_detail = ""
     if use_json_profiles:
-        json_detail = """
+        json_detail = f"""
 
-CRITICAL - ULTRA-DETAILED JSON PROFILES (For 100% consistency):
+CRITICAL - ULTRA-DETAILED JSON PROFILES:
 
-For CHARACTERS, include:
-- physical: age (number), height_cm (exact), weight_kg, body_type, skin_tone (HEX color), skin_texture
-- face: shape, eyes (color HEX, shape, size, details), eyebrows (color HEX, shape, thickness), nose, lips (color HEX, shape, size), jawline, chin
-- hair: color_primary (HEX), color_secondary (HEX if highlights), length_cm (exact number), style, texture, parting, movement
-- clothing: top (type, color HEX, material, details, fit), bottom (same), shoes (same with height_cm)
-- accessories: list with exact descriptions and measurements
-- distinctive_features: exact location, size in cm, color HEX if applicable
-- posture: detailed stance description
-- movement: how they move
+For CHARACTERS:
+- physical: age, height_cm, weight_kg, body_type, skin_tone (HEX), skin_texture
+- face: shape, eyes (color HEX, shape, size), eyebrows (HEX, shape), nose, lips (HEX, shape), jawline
+- hair: color_primary (HEX), color_secondary (HEX), length_cm, style, texture, parting
+- clothing: top/bottom/shoes (type, color HEX, material, details, fit with exact measurements)
+- accessories: exact descriptions with sizes
+- distinctive_features: location, size in cm, color HEX
+- posture & movement
 
-For LOCATIONS, include:
-- location_type, architecture (buildings, walls, ground, details)
-- lighting: time (HH:MM), primary_source, color_temperature (Kelvin), specific colors (HEX), shadows (angle), atmosphere, reflections
-- weather: condition, visibility (meters), precipitation (mm/hour), humidity (%)
-- ambient_elements: list with sizes/colors
-- color_palette: dominant (HEX), accent_1 (HEX), accent_2 (HEX), accent_3 (HEX)
-- atmosphere: detailed mood
+For LOCATIONS:
+- architecture, lighting (time HH:MM, source, Kelvin, HEX colors, shadows)
+- weather (condition, visibility meters, precipitation, humidity%)
+- color_palette (dominant/accent HEX codes)
+- atmosphere
 
 For OBJECTS:
-- dimensions: LxWxH in cm, weight_kg, material_primary, material_secondary
-- colors: primary (HEX), secondary (HEX), finish (matte/glossy/metallic %)
-- design_details: shape, brand_style, wear_patterns
-- functional_details: what it does, how used
+- dimensions LxWxH cm, weight_kg, materials, colors (HEX), finish%, design
 
-Use EXACT hex colors, EXACT measurements, EXACT times."""
+STYLE ENFORCEMENT: ALL prompts must include "{visual_emphasis}" to maintain visual consistency.
+GENRE ENFORCEMENT: ALL scenes must reflect {genre} genre characteristics.
+"""
+
+    turntable_instruction = """
+
+TURNTABLE CHARACTER SHEET FORMAT:
+Create prompts for MULTIPLE VIEWS of each character:
+- Front view (facing camera, standing straight, arms at sides)
+- Side view (90-degree profile, left side, showing full body proportions)
+- Back view (rear view, showing back details, hair from behind)
+- 3/4 view (45-degree angle, showing face and body proportions)
+- Detail shots (close-up of face, hands, clothing details, accessories)
+
+Format: "character turnaround sheet, white background, multiple angles, T-pose or neutral stance, [front view | side view | back view | 3/4 view], character design reference"
+"""
 
     suno_instruction = """
 
-CRITICAL - SUNO AI OPTIMIZED STRUCTURE:
+SUNO AI PROMPT STRUCTURE (EXACT FORMAT):
 
-Create professional Suno AI prompt with this EXACT structure:
+Create with proper line breaks and sections:
 
-[Style: Genre, Mood, BPM (80-180), Key (e.g., E minor)]
-[Vocals: Type (Male/Female/Duet), Quality (Powerful/Soft/Raspy/Ethereal), Effects (Reverb/Echo/Auto-tune)]
-[Instruments: Instrument1, Instrument2, Instrument3 (minimum 3, maximum 6 specific instruments)]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[STYLE TAGS]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Genre: [Specific genre from {music_genre}]
+Mood: [Emotional tone]
+BPM: [80-180 exact number]
+Key: [Musical key, e.g., E minor, C major]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[VOCAL DIRECTION]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Voice Type: [Male/Female/Duet/Choir]
+Quality: [Powerful/Soft/Raspy/Ethereal/Emotional]
+Effects: [Reverb/Echo/Auto-tune/Harmonies]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[INSTRUMENTATION]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Primary: [Main instrument 1, Main instrument 2]
+Secondary: [Supporting instrument 1, Supporting instrument 2]
+Percussion: [Drum type, Additional percussion]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[SONG STRUCTURE]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Intro]
-(production note: atmospheric/building/quiet)
-(specific sound: synth swell/guitar riff/drum fill)
+(atmospheric build, 8 bars)
+(sound: synth pad swell / guitar arpeggio / ambient texture)
 
 [Verse 1]
-4-6 lines of lyrics
-Focus on setting/situation
-Natural rhyme scheme
+Line 1 of lyrics here
+Line 2 of lyrics here
+Line 3 of lyrics here
+Line 4 of lyrics here
 
 [Pre-Chorus]
-(building intensity/tempo change)
-2-4 lines transitioning to chorus
-Increasing emotional intensity
+(building intensity, adding layers)
+Line 1 transitioning to chorus
+Line 2 increasing energy
 
 [Chorus]
-(powerful vocals/full instrumentation/melodic hook)
-4-6 lines with memorable hook
-Main emotional message
-Repetitive catchy element
+(powerful vocals, full instrumentation, 120% energy)
+Hook line 1 - memorable melody
+Hook line 2 - emotional core
+Hook line 3 - repetitive catchy element
+Hook line 4 - resolution
 
 [Verse 2]
-4-6 lines developing the story
-Different perspective or progression
+Story development line 1
+Story development line 2
+Story development line 3
+Story development line 4
 
 [Bridge]
-(tempo change: slow down OR speed up OR breakdown)
-4-6 lines offering new perspective
-Emotional peak or introspection
+(tempo change: breakdown to half-time OR double-time build)
+(stripped instrumentation OR orchestral swell)
+New perspective line 1
+Emotional peak line 2
+Introspective moment line 3
+Building back to chorus line 4
 
-[Chorus]
-(explosive/full power/all instruments)
-Repeat with variations or ad-libs
+[Final Chorus]
+(explosive, all instruments, vocal harmonies, ad-libs)
+Hook with variations
+Added vocal runs
+Extended resolution
 
 [Outro]
-(fading/whispered/instrumental)
-2-4 lines or instrumental fade
-Emotional resolution
-(specific ending: fade out/hard stop/echo)
+(gradual fade / hard stop / echo effect)
+Final emotional statement
+(ending: fade to silence / instrumental reprise / vocal whisper)
 
-RULES:
-- Use () for production notes
-- Use [] for section markers  
-- Specify exact BPM (e.g., 120 BPM not "medium tempo")
-- Name exact instruments (not "strings" but "violin, cello")
-- Include vocal directions (whispered), (belted), (harmonized)
-- Add sound effects where appropriate (rain), (vinyl crackle), (glitch)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[PRODUCTION NOTES]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Use (parentheses) for production directions
+- Use [brackets] for section markers
+- Include sound effects: (rain), (vinyl crackle), (glitch)
+- Specify dynamics: (whispered), (belted), (harmonized)
 """
 
-    return f"""You are a Music Video Director. Create ULTRA-DETAILED production plan in VALID JSON.
+    return f"""You are a Music Video Director. Create ULTRA-DETAILED plan in VALID JSON.
 
 Theme: "{topic}"
-Genre: {genre}, Visual: {visual_style}, Music: {music_genre}
+Genre: {genre} (ENFORCE genre characteristics in ALL scenes)
+Visual Style: {visual_style} (CRITICAL: Use "{visual_emphasis}" in ALL visual prompts)
+Music: {music_genre}
 Story: {story_instruction}
 {json_detail}
+{turntable_instruction}
 {suno_instruction}
 
-JSON SYNTAX RULES:
+JSON RULES:
 - Double quotes ONLY
 - NO trailing commas
-- NO comments
-- All brackets must match
+- ALL visual prompts MUST start with: "{visual_emphasis}, {genre} aesthetic"
 
 Return ONLY this JSON:
 {{
@@ -411,17 +490,17 @@ Return ONLY this JSON:
   "logline": "Concept (Korean)",
   "youtube": {{
     "title": "Viral title | AI Generated",
-    "description": "SEO description 200-300 words with timestamps",
-    "hashtags": "keyword, separated, commas, no hash symbols"
+    "description": "SEO 200-300 words",
+    "hashtags": "keywords, comma, separated"
   }},
   "music": {{
-    "style": "Genre Mood (Korean)",
-    "suno_prompt": "FULL Suno structure with [Style], [Vocals], [Instruments], [Intro], [Verse 1], [Pre-Chorus], [Chorus], [Verse 2], [Bridge], [Chorus], [Outro] with lyrics and production notes",
-    "tags": "[genre], [mood], [tempo]"
+    "style": "Style (Korean)",
+    "suno_prompt": "Complete Suno structure with all sections separated by lines as shown above",
+    "tags": "[genre], [mood]"
   }},
   "visual_style": {{
     "description": "{visual_style} (Korean)",
-    "character_prompt": "Main character {visual_style}",
+    "character_prompt": "{visual_emphasis}, {genre} aesthetic, main character",
     "style_tags": "{visual_style}, {genre}"
   }},
   "turntable": {{
@@ -429,32 +508,33 @@ Return ONLY this JSON:
       {{
         "id": "char1",
         "name": "Name (Korean)",
-        "json_profile": {{
-          "physical": {{"age": 25, "height_cm": 175, "skin_tone": "#F4D2B8"}},
-          "face": {{"eyes": {{"color": "#00CED1", "shape": "almond"}}}},
-          "hair": {{"color_primary": "#C0C0C0", "length_cm": 60, "style": "straight layered"}},
-          "clothing": {{"top": {{"type": "leather jacket", "color": "#1C1C1C", "details": "LED strips #00BFFF"}}}},
-          "accessories": ["silver necklace 50cm", "fingerless gloves"],
-          "distinctive_features": ["tattoo left cheek 3cm x 5cm #00BFFF", "prosthetic left arm chrome"],
-          "posture": "confident upright",
-          "movement": "fluid graceful"
-        }},
-        "prompt": "360 character turnaround, white background, {visual_style}, front/side/back/3-4 view, full body"
+        "json_profile": {{detailed profile}},
+        "views": [
+          {{
+            "view_type": "front",
+            "prompt": "{visual_emphasis}, character turnaround sheet, white background, front view, T-pose, full body"
+          }},
+          {{
+            "view_type": "side",
+            "prompt": "{visual_emphasis}, character turnaround sheet, white background, side profile, full body proportions"
+          }},
+          {{
+            "view_type": "back",
+            "prompt": "{visual_emphasis}, character turnaround sheet, white background, back view, showing rear details"
+          }},
+          {{
+            "view_type": "3/4",
+            "prompt": "{visual_emphasis}, character turnaround sheet, white background, 3/4 angle view"
+          }}
+        ]
       }}
     ],
     "backgrounds": [
       {{
         "id": "loc1",
         "name": "Name (Korean)",
-        "json_profile": {{
-          "location_type": "urban alley",
-          "architecture": {{"buildings": "concrete 20-30 stories", "ground": "wet asphalt #2F4F4F"}},
-          "lighting": {{"time": "02:00", "color_temperature": "5000K", "neon_colors": ["#FF1493", "#00CED1"]}},
-          "weather": {{"condition": "light rain", "visibility": "50m"}},
-          "color_palette": {{"dominant": "#2F4F4F", "accent_1": "#00CED1", "accent_2": "#FF1493"}},
-          "atmosphere": "dystopian cyberpunk"
-        }},
-        "prompt": "360 environment rotation, {visual_style}"
+        "json_profile": {{profile}},
+        "prompt": "{visual_emphasis}, {genre} aesthetic, 360 environment"
       }}
     ],
     "objects": []
@@ -462,17 +542,17 @@ Return ONLY this JSON:
   "scenes": [
     {{
       "scene_num": 1,
-      "timecode": "00:00-00:05",
+      "timecode": "00:00-00:XX",
       "action": "Action (Korean)",
       "camera": "Shot (Korean)",
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "Scene composition and action",
-      "video_prompt": "Camera movement and transitions"
+      "image_prompt": "{visual_emphasis}, {genre} aesthetic, scene description",
+      "video_prompt": "Camera movement"
     }}
   ]
 }}
 
-Generate {scene_count} scenes with ultra-detailed json_profiles. Ensure VALID JSON."""
+Generate {scene_count} scenes."""
 
 def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
     """JSON 프로필을 프롬프트에 초정밀 적용"""
@@ -518,45 +598,40 @@ def json_profile_to_ultra_detailed_text(profile):
     if 'face' in profile:
         face = profile['face']
         if isinstance(face, dict):
-            if 'shape' in face: parts.append(f"face shape {face['shape']}")
+            if 'shape' in face: parts.append(f"{face['shape']} face shape")
             
-            if 'eyes' in face and isinstance(face['eyes'], dict):
-                eyes = face['eyes']
-                eye_desc = []
-                if 'color' in eyes: eye_desc.append(f"color {eyes['color']}")
-                if 'shape' in eyes: eye_desc.append(f"{eyes['shape']}")
-                if 'size' in eyes: eye_desc.append(f"{eyes['size']}")
-                if 'details' in eyes: eye_desc.append(eyes['details'])
-                if eye_desc: parts.append(f"eyes {' '.join(eye_desc)}")
+            if 'eyes' in face:
+                if isinstance(face['eyes'], dict):
+                    eyes = face['eyes']
+                    eye_parts = []
+                    if 'color' in eyes: eye_parts.append(f"{eyes['color']} color")
+                    if 'shape' in eyes: eye_parts.append(f"{eyes['shape']} shape")
+                    if 'size' in eyes: eye_parts.append(f"{eyes['size']} size")
+                    if eye_parts: parts.append(f"eyes: {', '.join(eye_parts)}")
             
-            if 'eyebrows' in face and isinstance(face['eyebrows'], dict):
-                eb = face['eyebrows']
-                if 'color' in eb or 'shape' in eb or 'thickness' in eb:
-                    parts.append(f"eyebrows {eb.get('color', '')} {eb.get('shape', '')} {eb.get('thickness', '')}")
+            if 'hair' in face or 'eyebrows' in face:
+                if 'eyebrows' in face and isinstance(face['eyebrows'], dict):
+                    eb = face['eyebrows']
+                    parts.append(f"eyebrows {eb.get('color', '')} {eb.get('shape', '')}")
             
-            if 'nose' in face: parts.append(f"nose {face['nose']}")
-            
-            if 'lips' in face and isinstance(face['lips'], dict):
-                lips = face['lips']
-                if 'color' in lips or 'shape' in lips:
-                    parts.append(f"lips {lips.get('color', '')} {lips.get('shape', '')} {lips.get('size', '')}")
-            
-            if 'jawline' in face: parts.append(f"jawline {face['jawline']}")
-            if 'chin' in face: parts.append(f"chin {face['chin']}")
+            if 'nose' in face: parts.append(f"{face['nose']} nose")
+            if 'lips' in face:
+                if isinstance(face['lips'], dict):
+                    lips = face['lips']
+                    parts.append(f"lips {lips.get('color', '')} {lips.get('shape', '')}")
+            if 'jawline' in face: parts.append(f"{face['jawline']} jawline")
     
     # 머리
     if 'hair' in profile:
         hair = profile['hair']
         if isinstance(hair, dict):
-            hair_desc = []
-            if 'color_primary' in hair: hair_desc.append(f"color {hair['color_primary']}")
-            if 'color_secondary' in hair: hair_desc.append(f"with {hair['color_secondary']} highlights")
-            if 'length_cm' in hair: hair_desc.append(f"{hair['length_cm']}cm length")
-            if 'style' in hair: hair_desc.append(hair['style'])
-            if 'texture' in hair: hair_desc.append(f"{hair['texture']} texture")
-            if 'parting' in hair: hair_desc.append(hair['parting'])
-            if 'movement' in hair: hair_desc.append(hair['movement'])
-            if hair_desc: parts.append(f"hair {' '.join(hair_desc)}")
+            hair_parts = []
+            if 'color_primary' in hair: hair_parts.append(f"{hair['color_primary']} color")
+            if 'color_secondary' in hair: hair_parts.append(f"with {hair['color_secondary']} highlights")
+            if 'length_cm' in hair: hair_parts.append(f"{hair['length_cm']}cm long")
+            if 'style' in hair: hair_parts.append(hair['style'])
+            if 'texture' in hair: hair_parts.append(f"{hair['texture']} texture")
+            if hair_parts: parts.append(f"hair: {', '.join(hair_parts)}")
     
     # 의상
     if 'clothing' in profile:
@@ -565,13 +640,11 @@ def json_profile_to_ultra_detailed_text(profile):
             for piece in ['top', 'bottom', 'shoes']:
                 if piece in cloth and isinstance(cloth[piece], dict):
                     item = cloth[piece]
-                    item_desc = []
-                    if 'type' in item: item_desc.append(item['type'])
-                    if 'color' in item: item_desc.append(f"color {item['color']}")
-                    if 'material' in item: item_desc.append(f"{item['material']} material")
-                    if 'details' in item: item_desc.append(item['details'])
-                    if 'fit' in item: item_desc.append(f"{item['fit']} fit")
-                    if item_desc: parts.append(f"wearing {' '.join(item_desc)}")
+                    item_parts = [item.get('type', '')]
+                    if 'color' in item: item_parts.append(f"color {item['color']}")
+                    if 'material' in item: item_parts.append(f"{item['material']}")
+                    if 'details' in item: item_parts.append(item['details'])
+                    if item_parts and item_parts[0]: parts.append(f"{piece}: {', '.join([p for p in item_parts if p])}")
     
     # 액세서리
     if 'accessories' in profile:
@@ -583,55 +656,82 @@ def json_profile_to_ultra_detailed_text(profile):
     if 'distinctive_features' in profile:
         feat = profile['distinctive_features']
         if isinstance(feat, list) and feat:
-            parts.append(f"distinctive features: {', '.join(feat)}")
+            parts.append(f"distinctive: {', '.join(feat)}")
     
     # 자세/움직임
-    if 'posture' in profile:
-        parts.append(f"posture {profile['posture']}")
-    if 'movement' in profile:
-        parts.append(f"movement {profile['movement']}")
+    if 'posture' in profile: parts.append(f"{profile['posture']} posture")
+    if 'movement' in profile: parts.append(f"{profile['movement']} movement")
     
     # 장소
     if 'location_type' in profile:
-        parts.append(f"location type {profile['location_type']}")
-    
-    if 'architecture' in profile:
-        arch = profile['architecture']
-        if isinstance(arch, dict):
-            for key, val in arch.items():
-                parts.append(f"{key} {val}")
+        parts.append(profile['location_type'])
     
     if 'lighting' in profile:
         light = profile['lighting']
         if isinstance(light, dict):
-            light_desc = []
-            if 'time' in light: light_desc.append(f"time {light['time']}")
-            if 'color_temperature' in light: light_desc.append(f"color temp {light['color_temperature']}")
-            if 'neon_colors' in light and isinstance(light['neon_colors'], list):
-                light_desc.append(f"neon colors {', '.join(light['neon_colors'])}")
-            if 'shadows' in light: light_desc.append(f"shadows {light['shadows']}")
-            if 'atmosphere' in light: light_desc.append(light['atmosphere'])
-            if light_desc: parts.append(f"lighting {' '.join(light_desc)}")
-    
-    if 'weather' in profile:
-        weather = profile['weather']
-        if isinstance(weather, dict):
-            weather_parts = [f"{k} {v}" for k, v in weather.items()]
-            if weather_parts: parts.append(f"weather {' '.join(weather_parts)}")
-    
-    if 'color_palette' in profile:
-        palette = profile['color_palette']
-        if isinstance(palette, dict):
-            colors = [f"{k}: {v}" for k, v in palette.items()]
-            if colors: parts.append(f"color palette {', '.join(colors)}")
+            light_parts = []
+            if 'time' in light: light_parts.append(f"time {light['time']}")
+            if 'color_temperature' in light: light_parts.append(f"{light['color_temperature']}")
+            if light_parts: parts.append(f"lighting: {', '.join(light_parts)}")
     
     if 'atmosphere' in profile:
-        parts.append(f"atmosphere {profile['atmosphere']}")
+        parts.append(f"{profile['atmosphere']} atmosphere")
     
     return ", ".join([p for p in parts if p])
 
 def create_json_export(plan_data):
     return json.dumps(plan_data, ensure_ascii=False, indent=2)
+
+def create_text_export(plan_data):
+    """텍스트 형식 프롬프트 저장"""
+    text = f"""
+{'='*80}
+AI MV DIRECTOR - 프롬프트 모음
+{'='*80}
+
+프로젝트: {plan_data.get('project_title', '')}
+생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{'='*80}
+YOUTUBE
+{'='*80}
+제목: {plan_data.get('youtube', {}).get('title', '')}
+
+설명:
+{plan_data.get('youtube', {}).get('description', '')}
+
+해시태그:
+{plan_data.get('youtube', {}).get('hashtags', '')}
+
+{'='*80}
+MUSIC - SUNO AI
+{'='*80}
+{plan_data.get('music', {}).get('suno_prompt', '')}
+
+{'='*80}
+TURNTABLE
+{'='*80}
+"""
+    
+    if 'turntable' in plan_data:
+        for cat in ['characters', 'backgrounds', 'objects']:
+            if cat in plan_data['turntable']:
+                text += f"\n{cat.upper()}:\n{'-'*80}\n"
+                for item in plan_data['turntable'][cat]:
+                    text += f"\n{item.get('name', '')}\n"
+                    if 'views' in item:
+                        for view in item['views']:
+                            text += f"  [{view.get('view_type', '')}] {view.get('prompt', '')}\n"
+                    else:
+                        text += f"  {item.get('prompt', '')}\n"
+    
+    text += f"\n{'='*80}\nSCENES\n{'='*80}\n"
+    for scene in plan_data.get('scenes', []):
+        text += f"\nScene {scene.get('scene_num', '')} - {scene.get('timecode', '')}\n"
+        text += f"Action: {scene.get('action', '')}\n"
+        text += f"Prompt: {scene.get('image_prompt', '')}\n\n"
+    
+    return text
 
 # ------------------------------------------------------------------
 # API 실행
@@ -679,7 +779,7 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
     return None
 
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    enhanced = f"{prompt}, cinematic, high quality, professional photography"
+    enhanced = f"{prompt}, professional photography, high quality"
     url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
     
     for attempt in range(max_retries):
@@ -714,7 +814,6 @@ if submit_btn:
             if not gemini_key:
                 st.warning("API Key 필요")
             else:
-                # 초기화
                 st.session_state.clear()
                 st.session_state['use_json_profiles'] = use_json_profiles
                 st.session_state['image_width'] = image_width
@@ -723,8 +822,7 @@ if submit_btn:
                 st.session_state['image_provider'] = image_provider
                 st.session_state['max_retries'] = max_retries
                 
-                # 1. 기획안 생성
-                with st.spinner("📝 AI가 극도로 디테일한 기획안을 작성 중..."):
+                with st.spinner("📝 극도로 디테일한 기획안 생성 중..."):
                     st.session_state['plan_data'] = generate_plan_auto(
                         topic, gemini_key, gemini_model, scene_count, story_opts,
                         selected_genre, selected_visual, selected_music, use_json_profiles
@@ -733,65 +831,56 @@ if submit_btn:
                 if st.session_state['plan_data']:
                     st.success("✅ 기획안 생성 완료!")
                     
-                    # 2. 자동 이미지 생성
                     if auto_generate:
                         plan = st.session_state['plan_data']
                         
                         # 턴테이블 생성
-                        if 'turntable' in plan:
-                            all_tt = []
-                            for cat in ['characters', 'backgrounds', 'objects']:
-                                if cat in plan['turntable']:
-                                    for item in plan['turntable'][cat]:
-                                        all_tt.append((cat, item))
+                        if 'turntable' in plan and 'characters' in plan['turntable']:
+                            st.markdown("### 🎭 턴테이블 자동 생성")
                             
-                            if all_tt:
-                                st.markdown("### 🎭 턴테이블 자동 생성")
-                                progress_tt = st.progress(0)
-                                status_tt = st.empty()
-                                
-                                for idx, (cat, item) in enumerate(all_tt):
-                                    tt_key = f"{cat}_{item.get('name', '')}"
-                                    status_tt.markdown(f"<div class='status-box'>🎭 {item.get('name', '')} 생성 중... ({idx+1}/{len(all_tt)})</div>", unsafe_allow_html=True)
+                            for char in plan['turntable']['characters']:
+                                char_name = char.get('name', '')
+                                if 'views' in char:
+                                    st.markdown(f"**{char_name}**")
+                                    progress_char = st.progress(0)
                                     
-                                    final_prompt = item.get('prompt', '')
-                                    if use_json_profiles and 'json_profile' in item:
-                                        detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
-                                        if detailed:
-                                            final_prompt = f"{detailed}, {final_prompt}"
-                                    
-                                    img, prov = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
-                                    
-                                    if img:
-                                        if 'turntable_images' not in st.session_state:
-                                            st.session_state['turntable_images'] = {}
-                                        st.session_state['turntable_images'][tt_key] = img
-                                        st.toast(f"✅ {item.get('name', '')} 완료")
-                                    
-                                    progress_tt.progress((idx + 1) / len(all_tt))
-                                    time.sleep(0.3)
-                                
-                                status_tt.markdown("<div class='status-box'>✅ 턴테이블 생성 완료!</div>", unsafe_allow_html=True)
+                                    for idx, view in enumerate(char['views']):
+                                        view_type = view.get('view_type', '')
+                                        tt_key = f"characters_{char_name}_{view_type}"
+                                        
+                                        final_prompt = view.get('prompt', '')
+                                        if use_json_profiles and 'json_profile' in char:
+                                            detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
+                                            if detailed:
+                                                final_prompt = f"{detailed}, {final_prompt}"
+                                        
+                                        img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                                        
+                                        if img:
+                                            if 'turntable_images' not in st.session_state:
+                                                st.session_state['turntable_images'] = {}
+                                            st.session_state['turntable_images'][tt_key] = img
+                                            st.toast(f"✅ {char_name} {view_type} 완료")
+                                        
+                                        progress_char.progress((idx + 1) / len(char['views']))
+                                        time.sleep(0.3)
                         
                         # 씬 이미지 생성
                         if 'scenes' in plan:
                             st.markdown("### 🎬 씬 이미지 자동 생성")
                             scenes = plan['scenes']
                             progress_sc = st.progress(0)
-                            status_sc = st.empty()
                             
                             for idx, scene in enumerate(scenes):
                                 scene_num = scene.get('scene_num', 0)
-                                status_sc.markdown(f"<div class='status-box'>🎬 Scene {scene_num} 생성 중... ({idx+1}/{len(scenes)})</div>", unsafe_allow_html=True)
                                 
                                 base = scene.get('image_prompt', '')
-                                
                                 if use_json_profiles and 'used_turntables' in scene:
                                     final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
                                 else:
-                                    final = f"{plan.get('visual_style', {}).get('character_prompt', '')}, {base}"
+                                    final = base
                                 
-                                img, prov = try_generate_image_with_fallback(final, image_width, image_height, image_provider, max_retries)
+                                img, _ = try_generate_image_with_fallback(final, image_width, image_height, image_provider, max_retries)
                                 
                                 if img:
                                     if 'generated_images' not in st.session_state:
@@ -801,8 +890,6 @@ if submit_btn:
                                 
                                 progress_sc.progress((idx + 1) / len(scenes))
                                 time.sleep(0.3)
-                            
-                            status_sc.markdown("<div class='status-box'>✅ 모든 이미지 생성 완료!</div>", unsafe_allow_html=True)
                     
                     time.sleep(1)
                     st.rerun()
@@ -845,8 +932,6 @@ if execution_mode == "수동 모드 (무제한)" and 'manual_prompt' in st.sessi
                 st.session_state['turntable_images'] = {}
                 st.success("✅ 로드 완료!")
                 st.rerun()
-            except json.JSONDecodeError as e:
-                st.error(f"JSON 파싱 실패: {str(e)}")
             except Exception as e:
                 st.error(f"오류: {e}")
     
@@ -866,13 +951,23 @@ if st.session_state.get('plan_data'):
     
     # 저장
     st.markdown("### 💾 저장")
-    st.download_button(
-        "📋 JSON 다운로드",
-        data=create_json_export(plan),
-        file_name=f"{plan.get('project_title', 'project')}.json",
-        mime="application/json",
-        use_container_width=True
-    )
+    col_save1, col_save2 = st.columns(2)
+    with col_save1:
+        st.download_button(
+            "📋 JSON 다운로드",
+            data=create_json_export(plan),
+            file_name=f"{plan.get('project_title', 'project')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    with col_save2:
+        st.download_button(
+            "📝 TXT 프롬프트",
+            data=create_text_export(plan),
+            file_name=f"{plan.get('project_title', 'project')}_prompts.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
     
     st.markdown("---")
     
@@ -887,82 +982,125 @@ if st.session_state.get('plan_data'):
     
     # 음악
     if 'music' in plan:
-        st.markdown("### 🎵 Suno AI 음악")
-        with st.expander("🎼 최적화된 Suno 프롬프트", expanded=False):
-            st.code(plan['music'].get('suno_prompt', ''), language="text")
-            st.caption(f"스타일: {plan['music'].get('style', '')}")
+        st.markdown("### 🎵 Suno AI")
+        with st.expander("🎼 Suno 프롬프트 (구조화)", expanded=False):
+            st.text_area("복사하세요", value=plan['music'].get('suno_prompt', ''), height=400, key="suno_p")
     
     st.markdown("---")
     
     # 턴테이블
-    if 'turntable' in plan:
-        st.markdown("### 🎭 턴테이블 (초정밀 JSON)")
+    if 'turntable' in plan and 'characters' in plan['turntable']:
+        st.markdown("### 🎭 턴테이블")
         
-        all_tt = []
-        for cat in ['characters', 'backgrounds', 'objects']:
-            if cat in plan['turntable']:
-                for item in plan['turntable'][cat]:
-                    all_tt.append((cat, item))
-        
-        if all_tt:
-            if st.button("🔄 모든 턴테이블 재생성"):
-                st.session_state['turntable_images'] = {}
-                st.rerun()
+        # 한번에 모든 턴테이블 생성
+        if st.button("🎨 모든 턴테이블 이미지 생성", use_container_width=True, type="primary"):
+            progress_all = st.progress(0)
+            status_all = st.empty()
             
-            for cat, item in all_tt:
-                tt_key = f"{cat}_{item.get('name', '')}"
-                
-                st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
-                
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    icon = "👤" if cat == "characters" else "🏙️" if cat == "backgrounds" else "📦"
-                    st.markdown(f"**{icon} {item.get('name', '')}** (ID: {item.get('id', '')})")
-                with col2:
-                    if tt_key in st.session_state.get('turntable_images', {}):
-                        if st.button("🔄", key=f"r_tt_{tt_key}"):
-                            del st.session_state['turntable_images'][tt_key]
-                            st.rerun()
-                
-                if 'json_profile' in item:
-                    with st.expander("📊 초정밀 JSON 프로필"):
-                        st.json(item['json_profile'])
-                
-                if tt_key in st.session_state.get('turntable_images', {}):
-                    st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
-                else:
-                    if st.button(f"📸 생성", key=f"g_tt_{tt_key}"):
-                        with st.spinner("생성 중..."):
-                            final_prompt = item.get('prompt', '')
-                            if use_json and 'json_profile' in item:
-                                detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
-                                if detailed:
-                                    final_prompt = f"{detailed}, {final_prompt}"
-                            
-                            img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
-                            
-                            if img:
-                                if 'turntable_images' not in st.session_state:
-                                    st.session_state['turntable_images'] = {}
-                                st.session_state['turntable_images'][tt_key] = img
-                                st.rerun()
-                            else:
-                                st.error("❌ 생성 실패")
-                
-                with st.expander("프롬프트"):
-                    st.code(item.get('prompt', ''))
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+            total_views = sum(len(char.get('views', [])) for char in plan['turntable']['characters'])
+            current = 0
+            
+            for char in plan['turntable']['characters']:
+                if 'views' in char:
+                    for view in char['views']:
+                        char_name = char.get('name', '')
+                        view_type = view.get('view_type', '')
+                        tt_key = f"characters_{char_name}_{view_type}"
+                        
+                        status_all.markdown(f"<div class='status-box'>생성 중: {char_name} - {view_type}</div>", unsafe_allow_html=True)
+                        
+                        final_prompt = view.get('prompt', '')
+                        if use_json and 'json_profile' in char:
+                            detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
+                            if detailed:
+                                final_prompt = f"{detailed}, {final_prompt}"
+                        
+                        img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                        
+                        if img:
+                            if 'turntable_images' not in st.session_state:
+                                st.session_state['turntable_images'] = {}
+                            st.session_state['turntable_images'][tt_key] = img
+                        
+                        current += 1
+                        progress_all.progress(current / total_views)
+                        time.sleep(0.3)
+            
+            status_all.markdown("<div class='status-box'>✅ 완료!</div>", unsafe_allow_html=True)
+            st.rerun()
+        
+        # 개별 턴테이블 표시
+        for char in plan['turntable']['characters']:
+            st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
+            st.markdown(f"**👤 {char.get('name', '')}** (ID: {char.get('id', '')})")
+            
+            if 'json_profile' in char:
+                with st.expander("📊 JSON 프로필"):
+                    st.json(char['json_profile'])
+            
+            if 'views' in char:
+                cols = st.columns(len(char['views']))
+                for idx, view in enumerate(char['views']):
+                    with cols[idx]:
+                        view_type = view.get('view_type', '')
+                        tt_key = f"characters_{char.get('name', '')}_{view_type}"
+                        
+                        st.caption(view_type.upper())
+                        
+                        if tt_key in st.session_state.get('turntable_images', {}):
+                            st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
+                        else:
+                            if st.button(f"📸", key=f"g_{tt_key}"):
+                                final_prompt = view.get('prompt', '')
+                                if use_json and 'json_profile' in char:
+                                    detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
+                                    if detailed:
+                                        final_prompt = f"{detailed}, {final_prompt}"
+                                
+                                img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                                if img:
+                                    if 'turntable_images' not in st.session_state:
+                                        st.session_state['turntable_images'] = {}
+                                    st.session_state['turntable_images'][tt_key] = img
+                                    st.rerun()
+            
+            st.markdown("</div>", unsafe_allow_html=True)
         
         st.markdown("---")
     
     # 씬
     st.markdown("### 🎬 스토리보드")
     
-    if st.button("🔄 모든 씬 재생성"):
-        st.session_state['generated_images'] = {}
+    # 한번에 모든 씬 생성
+    if st.button("🎨 모든 씬 이미지 생성", use_container_width=True, type="primary"):
+        scenes = plan.get('scenes', [])
+        progress_scenes = st.progress(0)
+        status_scenes = st.empty()
+        
+        for idx, scene in enumerate(scenes):
+            scene_num = scene.get('scene_num', 0)
+            status_scenes.markdown(f"<div class='status-box'>Scene {scene_num} 생성 중...</div>", unsafe_allow_html=True)
+            
+            base = scene.get('image_prompt', '')
+            if use_json and 'used_turntables' in scene:
+                final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
+            else:
+                final = base
+            
+            img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+            
+            if img:
+                if 'generated_images' not in st.session_state:
+                    st.session_state['generated_images'] = {}
+                st.session_state['generated_images'][scene_num] = img
+            
+            progress_scenes.progress((idx + 1) / len(scenes))
+            time.sleep(0.3)
+        
+        status_scenes.markdown("<div class='status-box'>✅ 완료!</div>", unsafe_allow_html=True)
         st.rerun()
     
+    # 개별 씬 표시
     for scene in plan.get('scenes', []):
         scene_num = scene.get('scene_num', 0)
         
@@ -984,32 +1122,23 @@ if st.session_state.get('plan_data'):
             st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
         else:
             if st.button(f"📸 촬영", key=f"g_s_{scene_num}"):
-                with st.spinner("생성 중..."):
-                    base = scene.get('image_prompt', '')
-                    
-                    if use_json and 'used_turntables' in scene:
-                        final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
-                    else:
-                        final = f"{plan.get('visual_style', {}).get('character_prompt', '')}, {base}"
-                    
-                    img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
-                    
-                    if img:
-                        if 'generated_images' not in st.session_state:
-                            st.session_state['generated_images'] = {}
-                        st.session_state['generated_images'][scene_num] = img
-                        st.rerun()
-                    else:
-                        st.error("❌ 생성 실패")
+                base = scene.get('image_prompt', '')
+                if use_json and 'used_turntables' in scene:
+                    final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
+                else:
+                    final = base
+                
+                img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+                if img:
+                    if 'generated_images' not in st.session_state:
+                        st.session_state['generated_images'] = {}
+                    st.session_state['generated_images'][scene_num] = img
+                    st.rerun()
         
         st.write(f"**액션:** {scene.get('action', '')}")
         st.write(f"**카메라:** {scene.get('camera', '')}")
         
         with st.expander("프롬프트"):
             st.code(scene.get('image_prompt', ''))
-            if use_json and 'used_turntables' in scene:
-                st.markdown("**JSON 적용 최종:**")
-                final = apply_json_profiles_to_prompt(scene.get('image_prompt', ''), scene['used_turntables'], plan.get('turntable', {}))
-                st.code(final)
         
         st.markdown("</div>", unsafe_allow_html=True)

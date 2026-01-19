@@ -13,15 +13,12 @@ from datetime import datetime
 import base64
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="AI MV Director", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI MV Director Pro", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 스타일링 ---
 st.markdown("""
 <style>
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 5rem;
-    }
+    .block-container { padding-top: 1rem; padding-bottom: 5rem; }
     .scene-box {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
@@ -52,13 +49,12 @@ st.markdown("""
         padding: 15px;
         margin: 10px 0;
     }
-    .json-profile-box {
-        background-color: #f0f5ff;
-        border: 2px solid #597ef7;
+    .suno-section {
+        background-color: #f5f0ff;
+        border: 1px solid #722ed1;
         border-radius: 8px;
         padding: 12px;
-        margin: 10px 0;
-        font-size: 12px;
+        margin: 8px 0;
     }
     .turntable-tag {
         display: inline-block;
@@ -76,16 +72,6 @@ st.markdown("""
         height: 3em; 
         font-weight: bold;
     }
-    .manual-box {
-        background-color: #f8f9fa;
-        border: 2px dashed #FFD700;
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #4285F4;
-    }
     .status-box {
         background-color: #f0f7ff;
         border-left: 4px solid #4285F4;
@@ -94,38 +80,91 @@ st.markdown("""
         margin: 10px 0;
         font-size: 14px;
     }
-    .error-box {
-        background-color: #fff0f0;
-        border-left: 4px solid #ff4444;
-        padding: 12px;
-        border-radius: 8px;
+    .realtime-calc {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        font-size: 18px;
+        font-weight: bold;
         margin: 10px 0;
-    }
-    .stImage {
-        max-height: 400px;
-    }
-    .stImage img {
-        max-height: 400px;
-        object-fit: contain;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 트렌드 키워드 ---
+# --- 확장된 트렌드 키워드 (대폭 확장) ---
 TRENDING_KEYWORDS = {
-    "emotions": ["heartbreak", "hope", "nostalgia", "euphoria", "melancholy", "rage", "peace", "anxiety", "joy", "loneliness"],
-    "settings": ["neon city", "abandoned subway", "rooftop at dawn", "underwater palace", "desert highway", "floating islands", "dystopian Tokyo", "cyberpunk Seoul", "ancient temple", "space station"],
-    "characters": ["lonely hacker", "rebel artist", "time traveler", "android musician", "street dancer", "wandering poet", "revenge seeker", "fallen angel", "lost astronaut", "phantom thief"],
-    "aesthetics": ["retro 80s", "vaporwave dreams", "dark academia", "y2k nostalgia", "minimalist void", "baroque luxury", "glitch art", "neon noir", "pastel goth", "cyberpunk"],
-    "actions": ["running through rain", "dancing in fire", "flying over city", "drowning in memories", "breaking free", "searching for light", "falling through time", "rising from ashes", "chasing shadows", "embracing the void"],
-    "times": ["midnight", "golden hour", "endless night", "frozen moment", "parallel timeline", "infinite loop", "last sunrise", "first snowfall", "summer's end", "dawn of chaos"],
-    "trends_2025": ["AI awakening", "metaverse escape", "climate dystopia", "gen-z rebellion", "digital detox", "virtual romance", "blockchain dreams", "quantum love", "hologram memories", "synthetic emotions"]
+    "emotions": [
+        "heartbreak", "hope", "nostalgia", "euphoria", "melancholy", "rage", "peace", "anxiety", "joy", "loneliness",
+        "obsession", "liberation", "despair", "ecstasy", "bittersweet", "rebellion", "serenity", "madness", "yearning", "triumph",
+        "betrayal", "redemption", "devotion", "confusion", "enlightenment", "paranoia", "bliss", "grief", "wonder", "defiance"
+    ],
+    "settings": [
+        "neon city", "abandoned subway", "rooftop at dawn", "underwater palace", "desert highway", "floating islands",
+        "dystopian Tokyo", "cyberpunk Seoul", "ancient temple", "space station", "frozen tundra", "volcanic landscape",
+        "bioluminescent forest", "steampunk factory", "art deco ballroom", "post-apocalyptic wasteland", "crystal cave",
+        "holographic nightclub", "zero gravity station", "ancient ruins", "mirror dimension", "time-frozen city",
+        "neon-lit rain street", "abandoned amusement park", "underground bunker", "floating market", "digital void",
+        "cherry blossom garden", "brutalist architecture", "venetian canals", "himalayan monastery"
+    ],
+    "characters": [
+        "lonely hacker", "rebel artist", "time traveler", "android musician", "street dancer", "wandering poet",
+        "revenge seeker", "fallen angel", "lost astronaut", "phantom thief", "cursed immortal", "dimension hopper",
+        "memory collector", "dream architect", "soul merchant", "reality bender", "shadow assassin", "light keeper",
+        "chaos agent", "harmony seeker", "digital ghost", "analog soul", "future prophet", "past hunter",
+        "emotion vampire", "hope dealer", "fear eater", "love warrior", "death dancer", "life singer"
+    ],
+    "aesthetics": [
+        "retro 80s", "vaporwave dreams", "dark academia", "y2k nostalgia", "minimalist void", "baroque luxury",
+        "glitch art", "neon noir", "pastel goth", "cyberpunk", "afrofuturism", "solarpunk", "dieselpunk",
+        "cottagecore nightmare", "liminal space", "dreamcore", "weirdcore", "ethereal maximalism", "brutalist elegance",
+        "bio-organic tech", "crystal punk", "holographic minimalism", "dark romanticism", "neo-tokyo", "cyber-shamanic",
+        "quantum aesthetic", "retro-futurism", "analog horror", "digital baroque", "neon gothic"
+    ],
+    "actions": [
+        "running through rain", "dancing in fire", "flying over city", "drowning in memories", "breaking free",
+        "searching for light", "falling through time", "rising from ashes", "chasing shadows", "embracing the void",
+        "shattering reality", "rebuilding self", "transcending dimension", "merging with machine", "escaping simulation",
+        "fighting inner demon", "reuniting souls", "sacrificing everything", "discovering truth", "accepting fate",
+        "defying gravity", "manipulating time", "bending light", "controlling elements", "summoning power"
+    ],
+    "times": [
+        "midnight", "golden hour", "endless night", "frozen moment", "parallel timeline", "infinite loop",
+        "last sunrise", "first snowfall", "summer's end", "dawn of chaos", "twilight zone", "eternal dusk",
+        "moment before impact", "second after rebirth", "edge of tomorrow", "yesterday's future", "timeless now",
+        "quantum midnight", "fractal dawn", "crystallized second"
+    ],
+    "trends_2025": [
+        "AI awakening", "metaverse escape", "climate dystopia", "gen-z rebellion", "digital detox", "virtual romance",
+        "blockchain dreams", "quantum love", "hologram memories", "synthetic emotions", "neural link love", "avatar identity",
+        "deep fake reality", "algorithmic fate", "carbon zero future", "biohacked beauty", "crypto collapse", "VR addiction",
+        "AI companion bond", "simulation theory", "consciousness upload", "memory marketplace", "emotion NFT", "dream streaming"
+    ],
+    "cinematic_styles": [
+        "Christopher Nolan epic", "Denis Villeneuve atmosphere", "David Fincher darkness", "Wes Anderson symmetry",
+        "Wong Kar-wai romance", "Park Chan-wook intensity", "Bong Joon-ho social", "Ridley Scott sci-fi",
+        "Guillermo del Toro fantasy", "Terrence Malick poetry", "Nicolas Winding Refn neon", "Gaspar Noé chaos",
+        "Kubrick precision", "Tarkovsky meditation", "Lynch surrealism", "Tarantino stylization"
+    ],
+    "music_moods": [
+        "anthemic euphoria", "melancholic beauty", "aggressive energy", "dreamy float", "dark intensity",
+        "playful chaos", "intimate whisper", "epic grandeur", "haunting mystery", "rebellious defiance",
+        "nostalgic warmth", "futuristic cold", "organic warmth", "synthetic precision", "raw emotion"
+    ]
 }
 
 def generate_trending_topic():
+    """더욱 다양한 주제 생성"""
     templates = [
         "{character} experiencing {emotion} in a {setting} during {time}, {aesthetic} style, {action}",
         "{emotion} journey of a {character} in {setting}, {aesthetic} vibes, {trend}",
+        "{cinematic} inspired: {character} {action} in {setting}, {aesthetic} aesthetic",
+        "{trend} era: {character} feeling {emotion}, {setting}, {time}",
+        "{aesthetic} music video: {character} in {setting}, {emotion} meets {music_mood}",
+        "Visual poem: {character} {action}, {setting} at {time}, {cinematic} cinematography",
+        "{music_mood} energy: {character} confronts {emotion} in {setting}, {trend}",
+        "Experimental: {character} trapped in {setting}, {aesthetic} meets {cinematic}",
     ]
     template = random.choice(templates)
     return template.format(
@@ -135,14 +174,23 @@ def generate_trending_topic():
         aesthetic=random.choice(TRENDING_KEYWORDS["aesthetics"]),
         action=random.choice(TRENDING_KEYWORDS["actions"]),
         time=random.choice(TRENDING_KEYWORDS["times"]),
-        trend=random.choice(TRENDING_KEYWORDS["trends_2025"])
+        trend=random.choice(TRENDING_KEYWORDS["trends_2025"]),
+        cinematic=random.choice(TRENDING_KEYWORDS["cinematic_styles"]),
+        music_mood=random.choice(TRENDING_KEYWORDS["music_moods"])
     )
 
 def get_viral_topic_with_ai(api_key, model_name):
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
-        response = model.generate_content("Generate ONE viral music video concept (1-2 sentences).")
+        prompt = """Generate ONE highly creative, viral-worthy music video concept. 
+        Be specific, cinematic, and emotionally compelling. Include:
+        - Unique character/protagonist
+        - Vivid setting/location
+        - Core emotion/theme
+        - Visual style reference
+        Keep it to 2-3 sentences. Make it feel like a blockbuster movie pitch."""
+        response = model.generate_content(prompt)
         return response.text.strip().strip('"')
     except:
         return generate_trending_topic()
@@ -153,10 +201,81 @@ def get_api_key(key_name):
     elif os.getenv(key_name): return os.getenv(key_name)
     return None
 
-# --- 장르/스타일 ---
-VIDEO_GENRES = ["Action/Thriller", "Sci-Fi", "Fantasy", "Horror", "Drama", "Romance", "Comedy", "Mystery", "Noir", "Cyberpunk", "Post-Apocalyptic", "Western", "Historical", "Music Video", "Abstract/Experimental", "Anime Style", "Surreal"]
-VISUAL_STYLES = ["Photorealistic/Cinematic", "Anime/Manga", "3D Animation", "2D Animation", "Stop Motion", "Watercolor", "Oil Painting", "Comic Book", "Pixel Art", "Minimalist", "Baroque", "Impressionist", "Cyberpunk Neon", "Dark Fantasy", "Pastel Dreamy", "Black & White", "Retro 80s", "Vaporwave"]
-MUSIC_GENRES = ["Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical", "Country", "Metal", "Indie", "K-Pop", "Lo-Fi", "Trap", "House", "Techno", "Ambient", "Synthwave", "Phonk", "Drill", "Afrobeat"]
+# --- 장르/스타일 (확장) ---
+VIDEO_GENRES = [
+    "Action/Thriller", "Sci-Fi Epic", "Dark Fantasy", "Psychological Horror", "Romantic Drama", 
+    "Neo-Noir", "Cyberpunk", "Post-Apocalyptic", "Surreal/Abstract", "Music Video (Performance)",
+    "Music Video (Narrative)", "Experimental Art Film", "Anime/Animation", "Documentary Style",
+    "Found Footage", "One-Shot/Long Take", "Dance Film", "Visual Poem", "Social Commentary",
+    "Cosmic Horror", "Magical Realism", "Dystopian Future", "Historical Epic", "Slice of Life"
+]
+
+VISUAL_STYLES = [
+    "Photorealistic/Cinematic", "Hyperrealistic 8K", "Anime/Manga", "3D Pixar Style", 
+    "2D Traditional Animation", "Watercolor Painting", "Oil Painting Classical", "Cyberpunk Neon",
+    "Dark Fantasy Gothic", "Pastel Dreamy", "Black & White Film Noir", "Retro 80s VHS",
+    "Vaporwave Aesthetic", "Lo-Fi Indie", "High Fashion Editorial", "Gritty Documentary",
+    "Surrealist Art", "Minimalist Clean", "Maximalist Baroque", "Glitch Art Digital"
+]
+
+MUSIC_GENRES = [
+    "Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical", 
+    "Metal", "Indie", "K-Pop", "Lo-Fi", "Trap", "House", "Techno", "Ambient",
+    "Synthwave", "Phonk", "Drill", "Afrobeat", "Latin", "Folk", "Country",
+    "Orchestral/Cinematic", "Experimental", "Post-Rock", "Dream Pop", "Shoegaze"
+]
+
+# --- 비주얼 스타일 강조 (특히 실사) ---
+def get_visual_style_emphasis(visual_style):
+    style_map = {
+        "Photorealistic/Cinematic": """ULTRA PHOTOREALISTIC, INDISTINGUISHABLE FROM REAL PHOTOGRAPH, 
+shot on ARRI ALEXA 65, anamorphic lens, 8K RAW resolution, natural film grain, 
+REAL HUMAN with actual skin texture and pores, subsurface scattering on skin, 
+physically accurate lighting, global illumination, ray-traced reflections,
+professional cinematography by Roger Deakins, shallow depth of field f/1.4,
+real world materials and textures, lifelike eye reflections and catchlights,
+photographic color science, no CGI look, no uncanny valley, ACTUAL PHOTOGRAPH QUALITY""",
+        
+        "Hyperrealistic 8K": """HYPERREALISTIC 8K PHOTOGRAPHY, RED V-RAPTOR 8K VV sensor,
+real human photography, actual skin texture with imperfections, visible pores,
+photojournalistic quality, documentary realism, no digital enhancement look,
+natural ambient lighting, real shadows, genuine facial expressions,
+shot by Annie Leibovitz, magazine cover quality, undeniably real""",
+        
+        "Anime/Manga": """anime style, manga illustration, cel-shaded, vibrant anime colors, 
+expressive anime eyes, clean linework, anime aesthetic, Studio Ghibli quality,
+Makoto Shinkai lighting, detailed anime backgrounds""",
+        
+        "3D Pixar Style": """3D rendered, Pixar Animation Studios quality, CGI animation, 
+smooth gradients, subsurface scattering, ray-traced lighting, 
+Disney/Pixar character design, expressive 3D characters""",
+        
+        "Cyberpunk Neon": """cyberpunk aesthetic, neon lights, synthwave colors, 
+futuristic cityscape, rain-slicked streets, holographic advertisements,
+Blade Runner 2049 cinematography, volumetric fog, RGB lighting,
+dark with vibrant neon accents, tech-noir atmosphere""",
+        
+        "Dark Fantasy Gothic": """dark fantasy, gothic architecture, moody atmosphere, 
+dramatic chiaroscuro lighting, mysterious fog, medieval dark aesthetics,
+Game of Thrones visual quality, dark romanticism, ominous shadows""",
+        
+        "Black & White Film Noir": """black and white cinematography, high contrast,
+dramatic shadows, film noir lighting, 1940s Hollywood style,
+venetian blind shadows, fog-filled streets, classic cinema look""",
+        
+        "Retro 80s VHS": """1980s aesthetic, VHS quality, scan lines, chromatic aberration,
+neon colors, analog warmth, retro futurism, Stranger Things vibe,
+practical effects look, vintage film grain""",
+        
+        "High Fashion Editorial": """high fashion photography, Vogue editorial quality,
+dramatic fashion lighting, avant-garde styling, luxury aesthetic,
+shot by Mario Testino, couture fashion, editorial composition""",
+        
+        "Surrealist Art": """surrealist art style, Salvador Dali inspired, 
+dreamlike imagery, impossible geometry, melting reality,
+symbolic visual metaphors, subconscious imagery, Magritte influence"""
+    }
+    return style_map.get(visual_style, f"{visual_style}, high quality, professional")
 
 # --- 사이드바 ---
 with st.sidebar:
@@ -173,59 +292,68 @@ with st.sidebar:
             st.success("✅ Gemini Key 연결됨")
         else:
             gemini_key = st.text_input("Gemini API Key", type="password")
-        model_options = ["gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-pro", "gemini-1.0-pro"]
-        gemini_model = st.selectbox("모델", model_options, index=0, label_visibility="collapsed")
+        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+        gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
     st.subheader("🎨 이미지 생성")
-    auto_generate = st.checkbox("자동 이미지 생성", value=True)
+    auto_generate = st.checkbox("자동 이미지 생성", value=False)
     infinite_retry = st.checkbox("무한 재시도", value=False)
-    image_provider = st.selectbox("엔진", ["Segmind (안정)", "Pollinations Turbo ⚡", "Pollinations Flux"], index=0)
+    image_provider = st.selectbox("엔진", ["Pollinations Flux", "Pollinations Turbo ⚡"], index=0)
     
     if not infinite_retry:
         max_retries = st.slider("재시도", 1, 10, 3)
     else:
         max_retries = 999
 
-    if st.button("🗑️ 초기화"):
+    st.markdown("---")
+    if st.button("🗑️ 전체 초기화"):
         st.session_state.clear()
         st.rerun()
 
 # --- 메인 화면 ---
-st.title("🎬 AI MV Director")
+st.title("🎬 AI MV Director Pro")
+st.caption("업계 최고 수준의 뮤직비디오 기획 시스템")
 
 ratio_map = {
     "16:9 (Cinema)": (1024, 576),
     "9:16 (Portrait)": (576, 1024),
     "1:1 (Square)": (1024, 1024),
+    "21:9 (Ultrawide)": (1024, 439),
+    "4:3 (Classic)": (1024, 768),
 }
 
-if 'scene_count' not in st.session_state:
-    st.session_state.scene_count = 8
-if 'total_duration' not in st.session_state:
-    st.session_state.total_duration = 60
-if 'seconds_per_scene' not in st.session_state:
-    st.session_state.seconds_per_scene = 5
-if 'random_topic' not in st.session_state:
-    st.session_state.random_topic = ""
-if 'plan_data' not in st.session_state:
-    st.session_state['plan_data'] = None
-if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {}
-if 'turntable_images' not in st.session_state:
-    st.session_state['turntable_images'] = {}
+# 세션 상태 초기화
+defaults = {
+    'scene_count': 8,
+    'total_duration': 60,
+    'seconds_per_scene': 5,
+    'random_topic': "",
+    'plan_data': None,
+    'generated_images': {},
+    'turntable_images': {}
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 with st.expander("📝 프로젝트 설정", expanded=True):
+    # 바이럴 주제 생성
     st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
-    st.markdown("### 🔥 바이럴 주제 생성")
+    st.markdown("### 🔥 바이럴 주제 생성기")
     
-    col_t1, col_t2 = st.columns(2)
+    col_t1, col_t2, col_t3 = st.columns(3)
     with col_t1:
-        if st.button("🎲 랜덤", use_container_width=True):
+        if st.button("🎲 랜덤 생성", use_container_width=True):
             st.session_state.random_topic = generate_trending_topic()
             st.rerun()
     with col_t2:
-        if st.button("🤖 AI", use_container_width=True):
+        if st.button("🎲🎲 5개 생성", use_container_width=True):
+            topics = [generate_trending_topic() for _ in range(5)]
+            st.session_state.random_topic = "\n---\n".join(topics)
+            st.rerun()
+    with col_t3:
+        if st.button("🤖 AI 생성", use_container_width=True):
             if gemini_key:
                 st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
                 st.rerun()
@@ -237,66 +365,106 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     st.markdown("</div>", unsafe_allow_html=True)
     
     with st.form("project_form"):
-        topic = st.text_area("영상 주제", height=100, value=st.session_state.random_topic, placeholder="주제 입력")
+        topic = st.text_area("🎯 영상 주제/컨셉", height=120, 
+                            value=st.session_state.random_topic if st.session_state.random_topic else "",
+                            placeholder="뮤직비디오의 주제, 스토리, 분위기를 상세히 입력하세요...")
         
         st.markdown("---")
-        use_json_profiles = st.checkbox("🎯 JSON 프로필 사용 (극도 디테일)", value=True)
+        
+        # JSON 프로필 옵션
+        col_opt1, col_opt2 = st.columns(2)
+        with col_opt1:
+            use_json_profiles = st.checkbox("🎯 JSON 프로필 (극도 디테일)", value=True)
+        with col_opt2:
+            expert_mode = st.checkbox("🏆 전문가 모드 (심층 분석)", value=True)
+        
         st.markdown("---")
         
+        # 장르/스타일 선택
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
-            selected_genre = st.selectbox("🎬 장르", VIDEO_GENRES, index=0)
+            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0)
         with col_g2:
-            selected_visual = st.selectbox("🎨 스타일", VISUAL_STYLES, index=0)
+            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0)
         with col_g3:
-            selected_music = st.selectbox("🎵 음악", MUSIC_GENRES, index=0)
+            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0)
         
+        st.markdown("---")
+        
+        # 비율 및 런닝타임
         col1, col2 = st.columns(2)
         with col1:
-            aspect_ratio = st.selectbox("🎞️ 비율", ["16:9 (Cinema)", "9:16 (Portrait)", "1:1 (Square)"], index=0)
+            aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
             image_width, image_height = ratio_map[aspect_ratio]
         
         with col2:
-            duration_mode = st.radio("⏱️ 런닝타임 설정", ["총 런닝타임", "씬 개수"], horizontal=True)
+            duration_mode = st.radio("⏱️ 런닝타임 설정 방식", ["총 런닝타임 기준", "씬 개수 직접 지정"], horizontal=True)
         
-        if duration_mode == "총 런닝타임":
-            col_d1, col_d2 = st.columns(2)
+        # 런닝타임/씬 설정 (실시간 동기화)
+        st.markdown("#### ⏱️ 타임라인 설정")
+        
+        if duration_mode == "총 런닝타임 기준":
+            col_d1, col_d2, col_d3 = st.columns(3)
             with col_d1:
-                total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=300, value=st.session_state.total_duration, step=10)
+                total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=600, 
+                                                value=st.session_state.total_duration, step=5)
             with col_d2:
-                seconds_per_scene = st.slider("컷당 길이 (초)", 3, 15, st.session_state.seconds_per_scene)
-            
-            scene_count = max(1, int(total_duration / seconds_per_scene))
-            st.caption(f"→ 총 **{scene_count}개** 씬 생성")
+                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
+            with col_d3:
+                scene_count = max(1, int(total_duration / seconds_per_scene))
+                st.markdown(f"""
+                <div class='realtime-calc'>
+                    📊 총 {scene_count}개 씬<br>
+                    <small>{total_duration}초 ÷ {seconds_per_scene}초</small>
+                </div>
+                """, unsafe_allow_html=True)
             
             st.session_state.scene_count = scene_count
             st.session_state.total_duration = total_duration
             st.session_state.seconds_per_scene = seconds_per_scene
         else:
-            scene_count = st.number_input("씬 개수", min_value=2, max_value=30, value=st.session_state.scene_count, step=1)
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                scene_count = st.number_input("씬 개수", min_value=2, max_value=50, 
+                                             value=st.session_state.scene_count, step=1)
+            with col_s2:
+                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
+            with col_s3:
+                total_duration = scene_count * seconds_per_scene
+                st.markdown(f"""
+                <div class='realtime-calc'>
+                    ⏱️ 총 {total_duration}초<br>
+                    <small>({total_duration//60}분 {total_duration%60}초)</small>
+                </div>
+                """, unsafe_allow_html=True)
+            
             st.session_state.scene_count = scene_count
+            st.session_state.seconds_per_scene = seconds_per_scene
         
-        st.markdown("**📖 스토리**")
+        st.markdown("---")
+        
+        # 스토리 옵션
+        st.markdown("**📖 스토리 구성 요소**")
         cols = st.columns(4)
         with cols[0]:
-            use_arc = st.checkbox("기승전결", value=True)
-            use_sensory = st.checkbox("감각적", value=True)
+            use_arc = st.checkbox("기승전결 구조", value=True)
+            use_sensory = st.checkbox("감각적 묘사", value=True)
         with cols[1]:
-            use_trial = st.checkbox("시련", value=False)
-            use_dynamic = st.checkbox("역동적", value=True)
+            use_trial = st.checkbox("시련/갈등", value=True)
+            use_dynamic = st.checkbox("역동적 전개", value=True)
         with cols[2]:
-            use_emotional = st.checkbox("감정변화", value=True)
-            use_climax = st.checkbox("클라이맥스", value=True)
+            use_emotional = st.checkbox("감정 변화곡선", value=True)
+            use_climax = st.checkbox("클라이맥스 구축", value=True)
         with cols[3]:
-            use_symbolic = st.checkbox("상징", value=False)
-            use_twist = st.checkbox("반전", value=False)
+            use_symbolic = st.checkbox("상징/메타포", value=True)
+            use_twist = st.checkbox("반전 요소", value=False)
         
-        submit_btn = st.form_submit_button("🚀 프로젝트 시작")
+        st.markdown("---")
+        submit_btn = st.form_submit_button("🚀 프로젝트 생성", use_container_width=True, type="primary")
 
 # ------------------------------------------------------------------
-# 공통 함수
+# JSON 정리 함수
 # ------------------------------------------------------------------
-
 def clean_json_text(text):
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match:
@@ -310,259 +478,521 @@ def clean_json_text(text):
     text = re.sub(r',\s*}', '}', text)
     text = re.sub(r',\s*]', ']', text)
     text = re.sub(r'//.*?\n', '\n', text)
+    
+    # JSON 문자열 내의 제어 문자 이스케이프 처리
+    def escape_control_chars_in_strings(json_str):
+        result = []
+        in_string = False
+        escape_next = False
+        
+        for char in json_str:
+            if escape_next:
+                result.append(char)
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                result.append(char)
+                escape_next = True
+                continue
+            
+            if char == '"':
+                in_string = not in_string
+                result.append(char)
+                continue
+            
+            if in_string:
+                if char == '\n':
+                    result.append('\\n')
+                elif char == '\r':
+                    result.append('\\r')
+                elif char == '\t':
+                    result.append('\\t')
+                elif ord(char) < 32:
+                    result.append(f'\\u{ord(char):04x}')
+                else:
+                    result.append(char)
+            else:
+                result.append(char)
+        
+        return ''.join(result)
+    
+    text = escape_control_chars_in_strings(text)
     return text
 
-def get_visual_style_emphasis(visual_style):
-    """비주얼 스타일별 강조 프롬프트"""
-    style_map = {
-        "Photorealistic/Cinematic": "ULTRA REALISTIC, photorealistic, cinematic photography, shot on RED camera, 8K resolution, natural lighting, professional color grading, film grain, shallow depth of field, bokeh, lifelike textures, hyperrealistic details, actual human skin texture, real world materials, physically accurate lighting",
-        "Anime/Manga": "anime style, manga illustration, cel-shaded, vibrant anime colors, expressive anime eyes, clean linework, anime aesthetic",
-        "3D Animation": "3D rendered, Pixar style, CGI animation, smooth gradients, 3D modeling, ray-traced lighting",
-        "2D Animation": "2D animation, hand-drawn style, traditional animation, painted backgrounds",
-        "Watercolor": "watercolor painting, soft edges, color bleeding, paper texture, aquarelle",
-        "Oil Painting": "oil painting, thick brushstrokes, canvas texture, classical painting technique",
-        "Cyberpunk Neon": "cyberpunk, neon lights, synthwave, futuristic, glowing elements, dark with bright accents",
-        "Dark Fantasy": "dark fantasy, gothic, moody atmosphere, dramatic shadows, mysterious lighting",
-    }
-    return style_map.get(visual_style, visual_style)
-
-def get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json_profiles):
+# ------------------------------------------------------------------
+# 시스템 프롬프트 (전문가 수준)
+# ------------------------------------------------------------------
+def get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
     story_elements = []
-    if options.get('use_arc'): story_elements.append("story arc")
-    if options.get('use_sensory'): story_elements.append("sensory")
-    if options.get('use_dynamic'): story_elements.append("dynamic")
-    if options.get('use_emotional'): story_elements.append("emotional")
-    if options.get('use_climax'): story_elements.append("climax")
+    if options.get('use_arc'): story_elements.append("three-act structure with setup-confrontation-resolution")
+    if options.get('use_sensory'): story_elements.append("rich sensory details (visual, auditory, tactile)")
+    if options.get('use_dynamic'): story_elements.append("dynamic pacing with rhythm variations")
+    if options.get('use_emotional'): story_elements.append("emotional arc with clear beats")
+    if options.get('use_climax'): story_elements.append("building tension to powerful climax")
+    if options.get('use_trial'): story_elements.append("protagonist trials and obstacles")
+    if options.get('use_symbolic'): story_elements.append("symbolic imagery and visual metaphors")
+    if options.get('use_twist'): story_elements.append("unexpected twist or revelation")
     
-    story_instruction = ", ".join(story_elements) if story_elements else "cinematic"
-    
-    # 비주얼 스타일 강조
+    story_instruction = ", ".join(story_elements) if story_elements else "cinematic narrative flow"
     visual_emphasis = get_visual_style_emphasis(visual_style)
     
+    expert_instruction = ""
+    if expert_mode:
+        expert_instruction = """
+
+EXPERT MODE - INDUSTRY PROFESSIONAL STANDARDS:
+
+You are working at the level of top-tier music video directors (Hype Williams, Dave Meyers, Joseph Kahn, CHEZ, Woogie Kim).
+
+CINEMATOGRAPHY MASTERY:
+- Camera movements: Specify exact dolly/crane/steadicam/gimbal movements with timing
+- Lens choices: Indicate focal length (14mm wide, 50mm standard, 85mm portrait, 200mm telephoto)
+- Depth of field: Specify f-stop for each shot (f/1.4 shallow, f/8 deep)
+- Lighting setups: Key, fill, rim, practical lights with color temperature (2700K warm, 5600K daylight)
+
+COLOR SCIENCE:
+- Color palette: Specify exact HEX codes for dominant, secondary, accent colors
+- LUT reference: Reference specific color grades (Teal & Orange, Film Noir, Kodak Vision3)
+- Contrast ratio: Specify shadow/highlight relationship
+
+COMPOSITION:
+- Rule of thirds, golden ratio, leading lines, frame within frame
+- Negative space usage
+- Symmetry vs asymmetry choices
+
+EDITING RHYTHM:
+- Cut timing synced to musical beats (cut on 1, 2&, etc.)
+- Transition types: Hard cut, dissolve, whip pan, match cut, L-cut, J-cut
+- Pacing: Slow-motion percentage, speed ramping"""
+
+    # 실사 강조
+    photorealistic_extra = ""
+    if "Photorealistic" in visual_style or "Hyperrealistic" in visual_style:
+        photorealistic_extra = """
+
+CRITICAL - PHOTOREALISTIC REQUIREMENTS:
+Every image prompt MUST emphasize:
+- "REAL PHOTOGRAPH, not CGI, not AI-generated looking"
+- "actual human with real skin texture, pores, imperfections"
+- "shot on professional cinema camera"
+- "natural lighting, no artificial look"
+- "documentary/candid quality"
+AVOID: plastic skin, uncanny valley, overly smooth, CGI appearance, digital art style"""
+
     json_detail = ""
-    if use_json_profiles:
+    if use_json:
         json_detail = f"""
 
-CRITICAL - ULTRA-DETAILED JSON PROFILES:
+ULTRA-DETAILED JSON PROFILES (MANDATORY):
 
-For CHARACTERS:
-- physical: age, height_cm, weight_kg, body_type, skin_tone (HEX), skin_texture
-- face: shape, eyes (color HEX, shape, size), eyebrows (HEX, shape), nose, lips (HEX, shape), jawline
-- hair: color_primary (HEX), color_secondary (HEX), length_cm, style, texture, parting
-- clothing: top/bottom/shoes (type, color HEX, material, details, fit with exact measurements)
-- accessories: exact descriptions with sizes
-- distinctive_features: location, size in cm, color HEX
-- posture & movement
+For CHARACTERS - Include ALL of these:
+{{
+  "physical": {{
+    "age": "exact age",
+    "height_cm": number,
+    "weight_kg": number,
+    "body_type": "detailed description",
+    "skin_tone": "#HEX code",
+    "skin_texture": "description with imperfections for realism"
+  }},
+  "face": {{
+    "shape": "oval/round/square/heart/diamond",
+    "eyes": {{"color": "#HEX", "shape": "description", "size": "description", "special": "catchlights, expression"}},
+    "eyebrows": {{"color": "#HEX", "shape": "arched/straight/thick/thin", "grooming": "natural/shaped"}},
+    "nose": "detailed description",
+    "lips": {{"color": "#HEX", "shape": "full/thin/cupid bow", "texture": "smooth/chapped"}},
+    "jawline": "soft/defined/angular",
+    "skin_details": "freckles, moles, scars, wrinkles if any"
+  }},
+  "hair": {{
+    "color_primary": "#HEX",
+    "color_secondary": "#HEX for highlights/lowlights",
+    "length_cm": number,
+    "style": "detailed style description",
+    "texture": "straight/wavy/curly/coily",
+    "condition": "healthy/damaged/styled"
+  }},
+  "clothing": {{
+    "top": {{"type": "item", "color": "#HEX", "material": "fabric", "brand_style": "reference", "fit": "tight/loose/tailored", "details": "buttons/zippers/patterns"}},
+    "bottom": {{"type": "item", "color": "#HEX", "material": "fabric", "fit": "description"}},
+    "shoes": {{"type": "item", "color": "#HEX", "style": "description"}},
+    "outerwear": {{"type": "item", "color": "#HEX", "material": "fabric"}}
+  }},
+  "accessories": ["item1 with exact description", "item2 with size and material"],
+  "distinctive_features": ["feature1 with exact location and size", "feature2"],
+  "posture": "standing/sitting description",
+  "expression": "emotional state shown through face and body"
+}}
 
-For LOCATIONS:
-- architecture, lighting (time HH:MM, source, Kelvin, HEX colors, shadows)
-- weather (condition, visibility meters, precipitation, humidity%)
-- color_palette (dominant/accent HEX codes)
-- atmosphere
+For LOCATIONS/BACKGROUNDS:
+{{
+  "location_type": "specific place description",
+  "architecture": {{"style": "description", "materials": ["material1", "material2"], "condition": "new/weathered/ruined"}},
+  "lighting": {{
+    "time": "HH:MM",
+    "source": "natural/artificial/mixed",
+    "color_temperature": "2700K-6500K",
+    "key_color": "#HEX",
+    "fill_color": "#HEX",
+    "shadow_intensity": "soft/medium/hard",
+    "special_effects": "volumetric fog, god rays, etc."
+  }},
+  "weather": {{"condition": "clear/cloudy/rainy/foggy", "visibility_m": number, "precipitation": "none/light/heavy", "humidity_percent": number}},
+  "color_palette": {{"dominant": "#HEX", "secondary": "#HEX", "accent": "#HEX"}},
+  "atmosphere": "mood description",
+  "props": ["prop1 with position", "prop2 with details"]
+}}
 
-For OBJECTS:
-- dimensions LxWxH cm, weight_kg, materials, colors (HEX), finish%, design
+For OBJECTS/PROPS:
+{{
+  "name": "object name",
+  "dimensions": {{"length_cm": number, "width_cm": number, "height_cm": number}},
+  "weight_kg": number,
+  "material": "primary material",
+  "color": "#HEX",
+  "finish": "matte/glossy/metallic percentage",
+  "condition": "new/used/damaged",
+  "significance": "narrative importance"
+}}
 
-STYLE ENFORCEMENT: ALL prompts must include "{visual_emphasis}" to maintain visual consistency.
-GENRE ENFORCEMENT: ALL scenes must reflect {genre} genre characteristics.
+For VEHICLES:
+{{
+  "make": "brand",
+  "model": "specific model",
+  "year": number,
+  "color": "#HEX",
+  "condition": "showroom/used/weathered",
+  "modifications": ["mod1", "mod2"],
+  "interior": "description"
+}}
 """
 
     turntable_instruction = """
 
-TURNTABLE CHARACTER SHEET FORMAT:
-Create prompts for MULTIPLE VIEWS of each character:
-- Front view (facing camera, standing straight, arms at sides)
-- Side view (90-degree profile, left side, showing full body proportions)
-- Back view (rear view, showing back details, hair from behind)
-- 3/4 view (45-degree angle, showing face and body proportions)
-- Detail shots (close-up of face, hands, clothing details, accessories)
+TURNTABLE REFERENCE SHEETS (CRITICAL FOR CONSISTENCY):
 
-Format: "character turnaround sheet, white background, multiple angles, T-pose or neutral stance, [front view | side view | back view | 3/4 view], character design reference"
+Create COMPREHENSIVE turntable sheets for EACH element:
+
+CHARACTER TURNTABLES - Generate these views:
+1. "character turntable sheet, white/gray studio background, multiple views in one image":
+   - Full body front view (T-pose or A-pose)
+   - Full body side view (90° profile)
+   - Full body back view
+   - Full body 3/4 view
+
+2. "character detail sheet, white background, close-up details":
+   - Face close-up (front)
+   - Face profile (side)
+   - Hands detail
+   - Feet/shoes detail
+   - Signature accessory detail
+
+3. "expression sheet, white background, same character multiple expressions":
+   - Neutral
+   - Happy/Smiling
+   - Sad/Melancholy
+   - Angry/Intense
+   - Surprised
+
+LOCATION TURNTABLES:
+1. "environment concept art, panoramic view, establishing shot"
+2. "location detail sheet, key areas and props"
+3. "lighting variation sheet, same location, different times of day"
+
+PROP/OBJECT TURNTABLES:
+1. "product photography style, white background, multiple angles"
+2. "object in context, showing scale and usage"
+
+VEHICLE TURNTABLES:
+1. "automotive photography, studio lighting, front 3/4, rear 3/4, side profile"
+2. "interior detail shots"
+
+COSTUME TURNTABLES:
+1. "fashion flat lay, clothing items arranged"
+2. "costume on mannequin, front and back"
 """
 
     suno_instruction = """
 
-SUNO AI PROMPT STRUCTURE (EXACT FORMAT):
+SUNO AI PROMPT - STRUCTURED FORMAT (SEPARATE EACH SECTION CLEARLY):
 
-Create with proper line breaks and sections:
+The music prompt should be structured with clear sections that can be copied separately:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[STYLE TAGS]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Genre: [Specific genre from {music_genre}]
-Mood: [Emotional tone]
-BPM: [80-180 exact number]
-Key: [Musical key, e.g., E minor, C major]
+Section 1 - STYLE_TAGS:
+Genre: [specific subgenre]
+Mood: [emotional descriptor]
+BPM: [exact number 60-180]
+Key: [musical key like "E minor" or "C major"]
+Influences: [2-3 artist references]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[VOCAL DIRECTION]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Voice Type: [Male/Female/Duet/Choir]
-Quality: [Powerful/Soft/Raspy/Ethereal/Emotional]
-Effects: [Reverb/Echo/Auto-tune/Harmonies]
+Section 2 - VOCAL_DIRECTION:
+Voice_Type: [Male/Female/Duet/Choir/Instrumental]
+Vocal_Style: [Powerful/Soft/Raspy/Ethereal/Whispered/Belted]
+Vocal_Effects: [Reverb level, delay, harmonies, autotune if any]
+Language: [Korean/English/Mix]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INSTRUMENTATION]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Primary: [Main instrument 1, Main instrument 2]
-Secondary: [Supporting instrument 1, Supporting instrument 2]
-Percussion: [Drum type, Additional percussion]
+Section 3 - INSTRUMENTATION:
+Primary_Instruments: [Main instrument 1, Main instrument 2]
+Secondary_Instruments: [Supporting instruments]
+Percussion: [Drum kit type, electronic/acoustic, additional percussion]
+Bass: [Bass type and style]
+Synths: [If applicable, synth types]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[SONG STRUCTURE]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Section 4 - PRODUCTION:
+Mix_Style: [Lo-fi/Clean/Heavy/Minimal]
+Spatial: [Intimate/Wide/Arena]
+Era_Reference: [80s/90s/Modern/Futuristic]
+Special_Effects: [Vinyl crackle, glitch, risers, drops]
 
-[Intro]
-(atmospheric build, 8 bars)
-(sound: synth pad swell / guitar arpeggio / ambient texture)
+Section 5 - SONG_STRUCTURE:
+[Intro] - (description, 4-8 bars)
+[Verse 1] - Lyrics line 1 / Lyrics line 2 / Lyrics line 3 / Lyrics line 4
+[Pre-Chorus] - (building) Lyrics line 1 / Lyrics line 2
+[Chorus] - (full energy) Hook line 1 / Hook line 2 / Hook line 3 / Hook line 4
+[Verse 2] - Development line 1 / line 2 / line 3 / line 4
+[Bridge] - (breakdown or build) Bridge lyrics
+[Final Chorus] - (explosive, ad-libs) Extended hook
+[Outro] - (fade/hard stop) Closing statement
 
-[Verse 1]
-Line 1 of lyrics here
-Line 2 of lyrics here
-Line 3 of lyrics here
-Line 4 of lyrics here
-
-[Pre-Chorus]
-(building intensity, adding layers)
-Line 1 transitioning to chorus
-Line 2 increasing energy
-
-[Chorus]
-(powerful vocals, full instrumentation, 120% energy)
-Hook line 1 - memorable melody
-Hook line 2 - emotional core
-Hook line 3 - repetitive catchy element
-Hook line 4 - resolution
-
-[Verse 2]
-Story development line 1
-Story development line 2
-Story development line 3
-Story development line 4
-
-[Bridge]
-(tempo change: breakdown to half-time OR double-time build)
-(stripped instrumentation OR orchestral swell)
-New perspective line 1
-Emotional peak line 2
-Introspective moment line 3
-Building back to chorus line 4
-
-[Final Chorus]
-(explosive, all instruments, vocal harmonies, ad-libs)
-Hook with variations
-Added vocal runs
-Extended resolution
-
-[Outro]
-(gradual fade / hard stop / echo effect)
-Final emotional statement
-(ending: fade to silence / instrumental reprise / vocal whisper)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[PRODUCTION NOTES]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Use (parentheses) for production directions
-- Use [brackets] for section markers
-- Include sound effects: (rain), (vinyl crackle), (glitch)
-- Specify dynamics: (whispered), (belted), (harmonized)
+Section 6 - LYRICS_FULL:
+Complete lyrics with Korean and English if bilingual
 """
 
-    return f"""You are a Music Video Director. Create ULTRA-DETAILED plan in VALID JSON.
+    return f"""You are an ELITE music video director working at the highest industry standards.
+Create an ULTRA-DETAILED production plan in VALID JSON format.
 
+PROJECT BRIEF:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Theme: "{topic}"
-Genre: {genre} (ENFORCE genre characteristics in ALL scenes)
-Visual Style: {visual_style} (CRITICAL: Use "{visual_emphasis}" in ALL visual prompts)
-Music: {music_genre}
-Story: {story_instruction}
+Genre: {genre}
+Visual Style: {visual_style}
+Music Genre: {music_genre}
+Duration: {scene_count} scenes × {seconds_per_scene} seconds = {scene_count * seconds_per_scene} seconds total
+Story Elements: {story_instruction}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VISUAL STYLE ENFORCEMENT:
+ALL image prompts MUST begin with: "{visual_emphasis}"
+{photorealistic_extra}
+{expert_instruction}
 {json_detail}
 {turntable_instruction}
 {suno_instruction}
 
-JSON RULES:
-- Double quotes ONLY
+JSON FORMAT RULES:
+- Use double quotes ONLY
 - NO trailing commas
-- ALL visual prompts MUST start with: "{visual_emphasis}, {genre} aesthetic"
+- NO comments
+- Escape special characters properly
 
-Return ONLY this JSON:
+RETURN THIS EXACT JSON STRUCTURE:
 {{
-  "project_title": "Title (Korean)",
-  "logline": "Concept (Korean)",
+  "project_title": "Title in Korean",
+  "project_title_en": "Title in English",
+  "logline": "One-sentence concept in Korean",
+  "logline_en": "One-sentence concept in English",
+  "director_vision": "2-3 sentences about artistic vision and approach",
+  "target_audience": "Demographic and psychographic description",
+  "mood_board_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  
   "youtube": {{
-    "title": "Viral title | AI Generated",
-    "description": "SEO 200-300 words",
-    "hashtags": "keywords, comma, separated"
+    "title": "Viral-optimized title with | separator and keywords",
+    "description": "SEO-optimized 200-300 word description with timestamps",
+    "hashtags": "tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, tag9, tag10",
+    "thumbnail_concept": "Description of ideal thumbnail composition"
   }},
+  
   "music": {{
-    "style": "Style (Korean)",
-    "suno_prompt": "Complete Suno structure with all sections separated by lines as shown above",
-    "tags": "[genre], [mood]"
+    "style": "Detailed style description in Korean",
+    "style_en": "Detailed style description in English",
+    "style_tags": "genre, mood, bpm, key, influences",
+    "vocal_direction": "voice type, style, effects, language",
+    "instrumentation": "primary, secondary, percussion, bass, synths",
+    "production": "mix style, spatial, era, effects",
+    "song_structure": "Full structure with section markers",
+    "lyrics_full": "Complete lyrics",
+    "suno_prompt_combined": "All sections combined for Suno"
   }},
-  "visual_style": {{
-    "description": "{visual_style} (Korean)",
-    "character_prompt": "{visual_emphasis}, {genre} aesthetic, main character",
-    "style_tags": "{visual_style}, {genre}"
+  
+  "color_script": {{
+    "overall_palette": {{"dominant": "#HEX", "secondary": "#HEX", "accent": "#HEX"}},
+    "act1_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}},
+    "act2_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}},
+    "act3_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}}
   }},
+  
   "turntable": {{
     "characters": [
       {{
         "id": "char1",
-        "name": "Name (Korean)",
-        "json_profile": {{detailed profile}},
+        "name": "Character Name (Korean)",
+        "name_en": "Character Name (English)",
+        "role": "protagonist/antagonist/supporting",
+        "json_profile": {{complete character profile as specified above}},
         "views": [
-          {{
-            "view_type": "front",
-            "prompt": "{visual_emphasis}, character turnaround sheet, white background, front view, T-pose, full body"
-          }},
-          {{
-            "view_type": "side",
-            "prompt": "{visual_emphasis}, character turnaround sheet, white background, side profile, full body proportions"
-          }},
-          {{
-            "view_type": "back",
-            "prompt": "{visual_emphasis}, character turnaround sheet, white background, back view, showing rear details"
-          }},
-          {{
-            "view_type": "3/4",
-            "prompt": "{visual_emphasis}, character turnaround sheet, white background, 3/4 angle view"
-          }}
+          {{"view_type": "full_turntable", "prompt": "{visual_emphasis}, character turntable sheet, white studio background, full body, front view, side view, back view, 3/4 view, T-pose, character design reference sheet, multiple angles in one image"}},
+          {{"view_type": "face_detail", "prompt": "{visual_emphasis}, character face detail sheet, white background, front face close-up, side profile, various expressions"}},
+          {{"view_type": "costume_detail", "prompt": "{visual_emphasis}, costume detail sheet, white background, clothing details, fabric textures, accessories close-up"}},
+          {{"view_type": "action_poses", "prompt": "{visual_emphasis}, character action pose sheet, white background, dynamic poses, movement reference"}}
         ]
       }}
     ],
-    "backgrounds": [
+    "locations": [
       {{
         "id": "loc1",
-        "name": "Name (Korean)",
-        "json_profile": {{profile}},
-        "prompt": "{visual_emphasis}, {genre} aesthetic, 360 environment"
+        "name": "Location Name (Korean)",
+        "name_en": "Location Name (English)",
+        "json_profile": {{complete location profile}},
+        "views": [
+          {{"view_type": "establishing", "prompt": "{visual_emphasis}, establishing shot, wide angle, full environment"}},
+          {{"view_type": "detail_areas", "prompt": "{visual_emphasis}, location detail sheet, key areas, props, textures"}},
+          {{"view_type": "lighting_variations", "prompt": "{visual_emphasis}, same location, different lighting, day/night/golden hour"}}
+        ]
       }}
     ],
-    "objects": []
+    "props": [
+      {{
+        "id": "prop1",
+        "name": "Prop Name",
+        "json_profile": {{complete prop profile}},
+        "views": [
+          {{"view_type": "product_shot", "prompt": "{visual_emphasis}, product photography, white background, multiple angles"}},
+          {{"view_type": "in_context", "prompt": "{visual_emphasis}, prop in scene, showing scale and usage"}}
+        ]
+      }}
+    ],
+    "vehicles": []
   }},
+  
   "scenes": [
     {{
       "scene_num": 1,
-      "timecode": "00:00-00:XX",
-      "action": "Action (Korean)",
-      "camera": "Shot (Korean)",
+      "timecode": "00:00-00:{seconds_per_scene:02d}",
+      "act": "1/2/3",
+      "beat": "narrative beat description",
+      "action": "Detailed action description in Korean",
+      "action_en": "Detailed action description in English",
+      "emotion": "Character emotional state",
+      "camera": {{
+        "shot_type": "wide/medium/close-up/extreme close-up",
+        "movement": "static/pan/tilt/dolly/crane/handheld/steadicam",
+        "lens": "focal length mm",
+        "angle": "eye level/low angle/high angle/dutch angle"
+      }},
+      "lighting": "Lighting setup description",
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "{visual_emphasis}, {genre} aesthetic, scene description",
-      "video_prompt": "Camera movement"
+      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [detailed scene description with all visual elements]",
+      "video_prompt": "Motion and camera movement description for video generation",
+      "audio_sync": "What musical element this syncs to"
     }}
   ]
 }}
 
-Generate {scene_count} scenes."""
+Generate exactly {scene_count} scenes with proper timecodes.
+Each scene timecode should reflect {seconds_per_scene} second duration.
+Ensure visual and narrative coherence throughout."""
+
+# ------------------------------------------------------------------
+# JSON 프로필 텍스트 변환
+# ------------------------------------------------------------------
+def json_profile_to_ultra_detailed_text(profile):
+    """JSON 프로필을 상세 텍스트로 변환"""
+    parts = []
+    
+    if not isinstance(profile, dict):
+        return ""
+    
+    # Physical
+    if 'physical' in profile and isinstance(profile['physical'], dict):
+        phys = profile['physical']
+        phys_parts = []
+        if 'age' in phys: phys_parts.append(f"{phys['age']} years old")
+        if 'height_cm' in phys: phys_parts.append(f"{phys['height_cm']}cm tall")
+        if 'body_type' in phys: phys_parts.append(phys['body_type'])
+        if 'skin_tone' in phys: phys_parts.append(f"skin tone {phys['skin_tone']}")
+        if 'skin_texture' in phys: phys_parts.append(f"{phys['skin_texture']} skin texture")
+        if phys_parts: parts.append(", ".join(phys_parts))
+    
+    # Face
+    if 'face' in profile and isinstance(profile['face'], dict):
+        face = profile['face']
+        face_parts = []
+        if 'shape' in face: face_parts.append(f"{face['shape']} face")
+        if 'eyes' in face and isinstance(face['eyes'], dict):
+            eyes = face['eyes']
+            eye_desc = []
+            if 'color' in eyes: eye_desc.append(f"{eyes['color']} colored")
+            if 'shape' in eyes: eye_desc.append(eyes['shape'])
+            if eye_desc: face_parts.append(f"eyes ({', '.join(eye_desc)})")
+        if 'nose' in face: face_parts.append(f"{face['nose']} nose")
+        if 'lips' in face:
+            if isinstance(face['lips'], dict):
+                lip_desc = []
+                if 'color' in face['lips']: lip_desc.append(face['lips']['color'])
+                if 'shape' in face['lips']: lip_desc.append(face['lips']['shape'])
+                if lip_desc: face_parts.append(f"lips ({', '.join(lip_desc)})")
+        if 'jawline' in face: face_parts.append(f"{face['jawline']} jawline")
+        if face_parts: parts.append(", ".join(face_parts))
+    
+    # Hair
+    if 'hair' in profile and isinstance(profile['hair'], dict):
+        hair = profile['hair']
+        hair_parts = []
+        if 'color_primary' in hair: hair_parts.append(f"{hair['color_primary']} hair")
+        if 'length_cm' in hair: hair_parts.append(f"{hair['length_cm']}cm length")
+        if 'style' in hair: hair_parts.append(hair['style'])
+        if 'texture' in hair: hair_parts.append(f"{hair['texture']} texture")
+        if hair_parts: parts.append("hair: " + ", ".join(hair_parts))
+    
+    # Clothing
+    if 'clothing' in profile and isinstance(profile['clothing'], dict):
+        cloth = profile['clothing']
+        for piece in ['top', 'bottom', 'shoes', 'outerwear']:
+            if piece in cloth and isinstance(cloth[piece], dict):
+                item = cloth[piece]
+                item_parts = []
+                if 'type' in item: item_parts.append(item['type'])
+                if 'color' in item: item_parts.append(f"color {item['color']}")
+                if 'material' in item: item_parts.append(item['material'])
+                if item_parts: parts.append(f"{piece}: {', '.join(item_parts)}")
+    
+    # Accessories
+    if 'accessories' in profile and isinstance(profile['accessories'], list):
+        if profile['accessories']:
+            parts.append(f"accessories: {', '.join(profile['accessories'])}")
+    
+    # Location specific
+    if 'location_type' in profile:
+        parts.append(profile['location_type'])
+    
+    if 'lighting' in profile and isinstance(profile['lighting'], dict):
+        light = profile['lighting']
+        light_parts = []
+        if 'time' in light: light_parts.append(f"time {light['time']}")
+        if 'color_temperature' in light: light_parts.append(f"{light['color_temperature']}K")
+        if 'key_color' in light: light_parts.append(f"key light {light['key_color']}")
+        if light_parts: parts.append("lighting: " + ", ".join(light_parts))
+    
+    if 'atmosphere' in profile:
+        parts.append(f"{profile['atmosphere']} atmosphere")
+    
+    if 'weather' in profile and isinstance(profile['weather'], dict):
+        weather = profile['weather']
+        if 'condition' in weather:
+            parts.append(f"{weather['condition']} weather")
+    
+    return ", ".join([p for p in parts if p])
 
 def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
-    """JSON 프로필을 프롬프트에 초정밀 적용"""
+    """JSON 프로필을 프롬프트에 적용"""
     if not used_turntables or not turntable_data:
         return base_prompt
     
     profile_parts = []
     
     for tt_ref in used_turntables:
-        for category in ['characters', 'backgrounds', 'objects']:
+        for category in ['characters', 'locations', 'props', 'vehicles']:
             if category in turntable_data:
                 for item in turntable_data[category]:
                     if item.get('id') == tt_ref:
@@ -576,185 +1006,313 @@ def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
         return ", ".join(profile_parts) + ", " + base_prompt
     return base_prompt
 
-def json_profile_to_ultra_detailed_text(profile):
-    """JSON을 극도로 상세한 텍스트로 변환"""
-    parts = []
-    
-    if not isinstance(profile, dict):
-        return ""
-    
-    # 캐릭터 물리적 특징
-    if 'physical' in profile:
-        phys = profile['physical']
-        if isinstance(phys, dict):
-            if 'age' in phys: parts.append(f"{phys['age']} years old")
-            if 'height_cm' in phys: parts.append(f"{phys['height_cm']}cm tall")
-            if 'weight_kg' in phys: parts.append(f"{phys['weight_kg']}kg")
-            if 'body_type' in phys: parts.append(phys['body_type'])
-            if 'skin_tone' in phys: parts.append(f"skin tone {phys['skin_tone']}")
-            if 'skin_texture' in phys: parts.append(f"{phys['skin_texture']} skin")
-    
-    # 얼굴
-    if 'face' in profile:
-        face = profile['face']
-        if isinstance(face, dict):
-            if 'shape' in face: parts.append(f"{face['shape']} face shape")
-            
-            if 'eyes' in face:
-                if isinstance(face['eyes'], dict):
-                    eyes = face['eyes']
-                    eye_parts = []
-                    if 'color' in eyes: eye_parts.append(f"{eyes['color']} color")
-                    if 'shape' in eyes: eye_parts.append(f"{eyes['shape']} shape")
-                    if 'size' in eyes: eye_parts.append(f"{eyes['size']} size")
-                    if eye_parts: parts.append(f"eyes: {', '.join(eye_parts)}")
-            
-            if 'hair' in face or 'eyebrows' in face:
-                if 'eyebrows' in face and isinstance(face['eyebrows'], dict):
-                    eb = face['eyebrows']
-                    parts.append(f"eyebrows {eb.get('color', '')} {eb.get('shape', '')}")
-            
-            if 'nose' in face: parts.append(f"{face['nose']} nose")
-            if 'lips' in face:
-                if isinstance(face['lips'], dict):
-                    lips = face['lips']
-                    parts.append(f"lips {lips.get('color', '')} {lips.get('shape', '')}")
-            if 'jawline' in face: parts.append(f"{face['jawline']} jawline")
-    
-    # 머리
-    if 'hair' in profile:
-        hair = profile['hair']
-        if isinstance(hair, dict):
-            hair_parts = []
-            if 'color_primary' in hair: hair_parts.append(f"{hair['color_primary']} color")
-            if 'color_secondary' in hair: hair_parts.append(f"with {hair['color_secondary']} highlights")
-            if 'length_cm' in hair: hair_parts.append(f"{hair['length_cm']}cm long")
-            if 'style' in hair: hair_parts.append(hair['style'])
-            if 'texture' in hair: hair_parts.append(f"{hair['texture']} texture")
-            if hair_parts: parts.append(f"hair: {', '.join(hair_parts)}")
-    
-    # 의상
-    if 'clothing' in profile:
-        cloth = profile['clothing']
-        if isinstance(cloth, dict):
-            for piece in ['top', 'bottom', 'shoes']:
-                if piece in cloth and isinstance(cloth[piece], dict):
-                    item = cloth[piece]
-                    item_parts = [item.get('type', '')]
-                    if 'color' in item: item_parts.append(f"color {item['color']}")
-                    if 'material' in item: item_parts.append(f"{item['material']}")
-                    if 'details' in item: item_parts.append(item['details'])
-                    if item_parts and item_parts[0]: parts.append(f"{piece}: {', '.join([p for p in item_parts if p])}")
-    
-    # 액세서리
-    if 'accessories' in profile:
-        acc = profile['accessories']
-        if isinstance(acc, list) and acc:
-            parts.append(f"accessories: {', '.join(acc)}")
-    
-    # 특징
-    if 'distinctive_features' in profile:
-        feat = profile['distinctive_features']
-        if isinstance(feat, list) and feat:
-            parts.append(f"distinctive: {', '.join(feat)}")
-    
-    # 자세/움직임
-    if 'posture' in profile: parts.append(f"{profile['posture']} posture")
-    if 'movement' in profile: parts.append(f"{profile['movement']} movement")
-    
-    # 장소
-    if 'location_type' in profile:
-        parts.append(profile['location_type'])
-    
-    if 'lighting' in profile:
-        light = profile['lighting']
-        if isinstance(light, dict):
-            light_parts = []
-            if 'time' in light: light_parts.append(f"time {light['time']}")
-            if 'color_temperature' in light: light_parts.append(f"{light['color_temperature']}")
-            if light_parts: parts.append(f"lighting: {', '.join(light_parts)}")
-    
-    if 'atmosphere' in profile:
-        parts.append(f"{profile['atmosphere']} atmosphere")
-    
-    return ", ".join([p for p in parts if p])
-
+# ------------------------------------------------------------------
+# 내보내기 함수들
+# ------------------------------------------------------------------
 def create_json_export(plan_data):
     return json.dumps(plan_data, ensure_ascii=False, indent=2)
 
 def create_text_export(plan_data):
-    """텍스트 형식 프롬프트 저장"""
-    text = f"""
-{'='*80}
-AI MV DIRECTOR - 프롬프트 모음
-{'='*80}
-
-프로젝트: {plan_data.get('project_title', '')}
-생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-{'='*80}
-YOUTUBE
-{'='*80}
-제목: {plan_data.get('youtube', {}).get('title', '')}
-
-설명:
-{plan_data.get('youtube', {}).get('description', '')}
-
-해시태그:
-{plan_data.get('youtube', {}).get('hashtags', '')}
-
-{'='*80}
-MUSIC - SUNO AI
-{'='*80}
-{plan_data.get('music', {}).get('suno_prompt', '')}
-
-{'='*80}
-TURNTABLE
-{'='*80}
-"""
+    """텍스트 형식 내보내기"""
+    lines = []
+    lines.append("=" * 80)
+    lines.append("AI MV DIRECTOR PRO - 프로젝트 기획서")
+    lines.append("=" * 80)
+    lines.append(f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append("")
+    
+    lines.append(f"프로젝트: {plan_data.get('project_title', '')}")
+    lines.append(f"Project: {plan_data.get('project_title_en', '')}")
+    lines.append(f"컨셉: {plan_data.get('logline', '')}")
+    lines.append(f"Concept: {plan_data.get('logline_en', '')}")
+    lines.append("")
+    
+    if 'director_vision' in plan_data:
+        lines.append("-" * 40)
+        lines.append("DIRECTOR'S VISION")
+        lines.append("-" * 40)
+        lines.append(plan_data['director_vision'])
+        lines.append("")
+    
+    if 'youtube' in plan_data:
+        yt = plan_data['youtube']
+        lines.append("-" * 40)
+        lines.append("YOUTUBE")
+        lines.append("-" * 40)
+        lines.append(f"제목: {yt.get('title', '')}")
+        lines.append(f"설명:\n{yt.get('description', '')}")
+        lines.append(f"태그: {yt.get('hashtags', '')}")
+        lines.append("")
+    
+    if 'music' in plan_data:
+        music = plan_data['music']
+        lines.append("-" * 40)
+        lines.append("MUSIC / SUNO AI")
+        lines.append("-" * 40)
+        lines.append(f"스타일: {music.get('style', '')}")
+        lines.append("")
+        lines.append("[STYLE TAGS]")
+        lines.append(music.get('style_tags', ''))
+        lines.append("")
+        lines.append("[VOCAL DIRECTION]")
+        lines.append(music.get('vocal_direction', ''))
+        lines.append("")
+        lines.append("[INSTRUMENTATION]")
+        lines.append(music.get('instrumentation', ''))
+        lines.append("")
+        lines.append("[PRODUCTION]")
+        lines.append(music.get('production', ''))
+        lines.append("")
+        lines.append("[SONG STRUCTURE]")
+        lines.append(music.get('song_structure', ''))
+        lines.append("")
+        lines.append("[COMPLETE LYRICS]")
+        lines.append(music.get('lyrics_full', ''))
+        lines.append("")
     
     if 'turntable' in plan_data:
-        for cat in ['characters', 'backgrounds', 'objects']:
-            if cat in plan_data['turntable']:
-                text += f"\n{cat.upper()}:\n{'-'*80}\n"
-                for item in plan_data['turntable'][cat]:
-                    text += f"\n{item.get('name', '')}\n"
+        tt = plan_data['turntable']
+        lines.append("-" * 40)
+        lines.append("TURNTABLE SHEETS")
+        lines.append("-" * 40)
+        
+        for cat in ['characters', 'locations', 'props', 'vehicles']:
+            if cat in tt and tt[cat]:
+                lines.append(f"\n[{cat.upper()}]")
+                for item in tt[cat]:
+                    lines.append(f"\n  {item.get('name', '')} ({item.get('id', '')})")
                     if 'views' in item:
                         for view in item['views']:
-                            text += f"  [{view.get('view_type', '')}] {view.get('prompt', '')}\n"
-                    else:
-                        text += f"  {item.get('prompt', '')}\n"
+                            lines.append(f"    - {view.get('view_type', '')}: {view.get('prompt', '')}")
+        lines.append("")
     
-    text += f"\n{'='*80}\nSCENES\n{'='*80}\n"
-    for scene in plan_data.get('scenes', []):
-        text += f"\nScene {scene.get('scene_num', '')} - {scene.get('timecode', '')}\n"
-        text += f"Action: {scene.get('action', '')}\n"
-        text += f"Prompt: {scene.get('image_prompt', '')}\n\n"
+    if 'scenes' in plan_data:
+        lines.append("-" * 40)
+        lines.append("STORYBOARD")
+        lines.append("-" * 40)
+        for scene in plan_data['scenes']:
+            lines.append(f"\n[SCENE {scene.get('scene_num', '')}] {scene.get('timecode', '')}")
+            lines.append(f"  액션: {scene.get('action', '')}")
+            if 'camera' in scene and isinstance(scene['camera'], dict):
+                cam = scene['camera']
+                lines.append(f"  카메라: {cam.get('shot_type', '')} / {cam.get('movement', '')} / {cam.get('lens', '')}")
+            lines.append(f"  이미지 프롬프트: {scene.get('image_prompt', '')}")
+            lines.append(f"  비디오 프롬프트: {scene.get('video_prompt', '')}")
     
-    return text
+    return "\n".join(lines)
+
+def create_html_export(plan_data):
+    """HTML 형식 내보내기"""
+    html = f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{plan_data.get('project_title', 'MV Project')}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Pretendard', -apple-system, sans-serif; background: #0a0a0a; color: #fff; line-height: 1.6; }}
+        .container {{ max-width: 1200px; margin: 0 auto; padding: 40px 20px; }}
+        h1 {{ font-size: 3em; margin-bottom: 10px; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        h2 {{ font-size: 1.8em; margin: 40px 0 20px; padding-bottom: 10px; border-bottom: 2px solid #333; }}
+        h3 {{ font-size: 1.3em; margin: 20px 0 10px; color: #667eea; }}
+        .section {{ background: #111; border-radius: 12px; padding: 25px; margin: 20px 0; border: 1px solid #222; }}
+        .meta {{ color: #888; font-size: 0.9em; margin-bottom: 30px; }}
+        .prompt-box {{ background: #1a1a2e; border-left: 4px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 0 8px 8px 0; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-break: break-all; }}
+        .scene {{ background: #0f0f1a; border-radius: 8px; padding: 20px; margin: 15px 0; border: 1px solid #1a1a2e; }}
+        .scene-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }}
+        .scene-num {{ background: linear-gradient(135deg, #667eea, #764ba2); padding: 5px 15px; border-radius: 20px; font-weight: bold; }}
+        .timecode {{ color: #888; font-family: monospace; }}
+        .tag {{ display: inline-block; background: #222; padding: 4px 12px; border-radius: 15px; margin: 4px; font-size: 0.85em; }}
+        .turntable {{ background: #1a1a0a; border: 2px solid #ffd700; border-radius: 12px; padding: 20px; margin: 15px 0; }}
+        .copy-btn {{ background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 0.85em; }}
+        .copy-btn:hover {{ background: #764ba2; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }}
+        pre {{ white-space: pre-wrap; word-wrap: break-word; }}
+        .suno-section {{ background: #1a0a1a; border: 1px solid #722ed1; border-radius: 8px; padding: 15px; margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 {plan_data.get('project_title', '')}</h1>
+        <p class="meta">{plan_data.get('project_title_en', '')} | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+        
+        <div class="section">
+            <h2>📋 프로젝트 개요</h2>
+            <p><strong>컨셉:</strong> {plan_data.get('logline', '')}</p>
+            <p><strong>Concept:</strong> {plan_data.get('logline_en', '')}</p>
+            <p><strong>Director's Vision:</strong> {plan_data.get('director_vision', '')}</p>
+        </div>
+"""
+    
+    # YouTube
+    if 'youtube' in plan_data:
+        yt = plan_data['youtube']
+        html += f"""
+        <div class="section">
+            <h2>📺 YouTube</h2>
+            <h3>제목</h3>
+            <div class="prompt-box">{yt.get('title', '')}</div>
+            <h3>설명</h3>
+            <div class="prompt-box">{yt.get('description', '')}</div>
+            <h3>해시태그</h3>
+            <div class="prompt-box">{yt.get('hashtags', '')}</div>
+        </div>
+"""
+    
+    # Music
+    if 'music' in plan_data:
+        music = plan_data['music']
+        html += f"""
+        <div class="section">
+            <h2>🎵 Music / Suno AI</h2>
+            <div class="suno-section">
+                <h3>Style Tags</h3>
+                <div class="prompt-box">{music.get('style_tags', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>Vocal Direction</h3>
+                <div class="prompt-box">{music.get('vocal_direction', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>Instrumentation</h3>
+                <div class="prompt-box">{music.get('instrumentation', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>Production</h3>
+                <div class="prompt-box">{music.get('production', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>Song Structure</h3>
+                <div class="prompt-box">{music.get('song_structure', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>Complete Lyrics</h3>
+                <div class="prompt-box">{music.get('lyrics_full', '')}</div>
+            </div>
+            <div class="suno-section">
+                <h3>🎹 Complete Suno Prompt (Copy All)</h3>
+                <div class="prompt-box">{music.get('suno_prompt_combined', '')}</div>
+            </div>
+        </div>
+"""
+    
+    # Turntable
+    if 'turntable' in plan_data:
+        tt = plan_data['turntable']
+        html += """
+        <div class="section">
+            <h2>🎭 Turntable Reference Sheets</h2>
+"""
+        for cat in ['characters', 'locations', 'props', 'vehicles']:
+            if cat in tt and tt[cat]:
+                html += f"<h3>{cat.upper()}</h3><div class='grid'>"
+                for item in tt[cat]:
+                    html += f"""
+                    <div class="turntable">
+                        <h4>{item.get('name', '')} ({item.get('id', '')})</h4>
+"""
+                    if 'views' in item:
+                        for view in item['views']:
+                            html += f"""
+                        <p><strong>{view.get('view_type', '')}:</strong></p>
+                        <div class="prompt-box">{view.get('prompt', '')}</div>
+"""
+                    html += "</div>"
+                html += "</div>"
+        html += "</div>"
+    
+    # Scenes
+    if 'scenes' in plan_data:
+        html += """
+        <div class="section">
+            <h2>🎬 Storyboard</h2>
+"""
+        for scene in plan_data['scenes']:
+            camera_info = ""
+            if 'camera' in scene and isinstance(scene['camera'], dict):
+                cam = scene['camera']
+                camera_info = f"{cam.get('shot_type', '')} | {cam.get('movement', '')} | {cam.get('lens', '')} | {cam.get('angle', '')}"
+            
+            html += f"""
+            <div class="scene">
+                <div class="scene-header">
+                    <span class="scene-num">Scene {scene.get('scene_num', '')}</span>
+                    <span class="timecode">{scene.get('timecode', '')}</span>
+                </div>
+                <p><strong>Action:</strong> {scene.get('action', '')}</p>
+                <p><strong>Camera:</strong> {camera_info}</p>
+                <p><strong>Emotion:</strong> {scene.get('emotion', '')}</p>
+                <h4>Image Prompt:</h4>
+                <div class="prompt-box">{scene.get('image_prompt', '')}</div>
+                <h4>Video Prompt:</h4>
+                <div class="prompt-box">{scene.get('video_prompt', '')}</div>
+            </div>
+"""
+        html += "</div>"
+    
+    html += """
+    </div>
+    <script>
+        document.querySelectorAll('.prompt-box').forEach(box => {{
+            box.style.cursor = 'pointer';
+            box.title = 'Click to copy';
+            box.addEventListener('click', () => {{
+                navigator.clipboard.writeText(box.textContent);
+                const original = box.style.borderColor;
+                box.style.borderColor = '#00ff00';
+                setTimeout(() => box.style.borderColor = original, 500);
+            }});
+        }});
+    </script>
+</body>
+</html>"""
+    return html
 
 # ------------------------------------------------------------------
-# API 실행
+# 이미지 생성
 # ------------------------------------------------------------------
+def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
+    enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
+    
+    if "Flux" in provider:
+        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
+    else:
+        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=90)
+            if response.status_code == 200 and len(response.content) > 1000:
+                img = Image.open(BytesIO(response.content))
+                if img.size[0] > 100:
+                    return img, provider
+        except Exception as e:
+            pass
+        if attempt < max_retries - 1:
+            time.sleep(2)
+    return None, None
 
-def generate_with_fallback(prompt, api_key, start_model):
+# ------------------------------------------------------------------
+# API 생성
+# ------------------------------------------------------------------
+def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
-    models = [start_model, "gemini-1.5-flash", "gemini-1.0-pro"]
+    models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
     
-    for model_name in models:
+    for model_name in models_to_try:
         try:
             model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            time.sleep(1)
+            response = model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
             return response.text, model_name
-        except:
-            time.sleep(0.5)
+        except Exception as e:
+            time.sleep(1)
     raise Exception("All models failed")
 
-def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json):
+def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
     for attempt in range(3):
         try:
-            prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json)
+            prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
             
             cleaned = clean_json_text(response_text)
@@ -763,45 +1321,28 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
             return plan_data
         except json.JSONDecodeError as e:
             if attempt < 2:
-                st.warning(f"재시도 중... ({attempt+1}/3)")
+                st.warning(f"JSON 파싱 재시도 중... ({attempt+1}/3) - {str(e)[:50]}")
                 time.sleep(2)
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
-                with st.expander("생성된 응답"):
-                    st.code(response_text)
+                with st.expander("🔍 생성된 원본 응답 확인"):
+                    st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
                 return None
         except Exception as e:
             if attempt < 2:
+                st.warning(f"재시도 중... ({attempt+1}/3)")
                 time.sleep(2)
             else:
                 st.error(f"생성 실패: {e}")
                 return None
     return None
 
-def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    enhanced = f"{prompt}, professional photography, high quality"
-    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-    
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200 and len(response.content) > 1000:
-                img = Image.open(BytesIO(response.content))
-                if img.size[0] > 100:
-                    return img, provider
-        except:
-            pass
-        if attempt < max_retries - 1:
-            time.sleep(1)
-    return None, None
-
 # ------------------------------------------------------------------
-# 메인 실행 로직
+# 메인 실행
 # ------------------------------------------------------------------
-
 if submit_btn:
     if not topic:
-        st.warning("주제를 입력해주세요")
+        st.warning("⚠️ 주제를 입력해주세요")
     else:
         story_opts = {
             'use_arc': use_arc, 'use_trial': use_trial,
@@ -812,135 +1353,61 @@ if submit_btn:
         
         if execution_mode == "API 자동 실행":
             if not gemini_key:
-                st.warning("API Key 필요")
+                st.warning("⚠️ API Key가 필요합니다")
             else:
-                st.session_state.clear()
+                # 세션 초기화 (이미지 제외)
+                st.session_state['plan_data'] = None
                 st.session_state['use_json_profiles'] = use_json_profiles
+                st.session_state['expert_mode'] = expert_mode
                 st.session_state['image_width'] = image_width
                 st.session_state['image_height'] = image_height
-                st.session_state['auto_generate'] = auto_generate
-                st.session_state['image_provider'] = image_provider
-                st.session_state['max_retries'] = max_retries
+                st.session_state['seconds_per_scene'] = seconds_per_scene
                 
-                with st.spinner("📝 극도로 디테일한 기획안 생성 중..."):
+                with st.spinner("🎬 전문가 수준의 기획안 생성 중... (30초-2분 소요)"):
                     st.session_state['plan_data'] = generate_plan_auto(
                         topic, gemini_key, gemini_model, scene_count, story_opts,
-                        selected_genre, selected_visual, selected_music, use_json_profiles
+                        selected_genre, selected_visual, selected_music, 
+                        use_json_profiles, expert_mode, seconds_per_scene
                     )
                 
                 if st.session_state['plan_data']:
                     st.success("✅ 기획안 생성 완료!")
-                    
-                    if auto_generate:
-                        plan = st.session_state['plan_data']
-                        
-                        # 턴테이블 생성
-                        if 'turntable' in plan and 'characters' in plan['turntable']:
-                            st.markdown("### 🎭 턴테이블 자동 생성")
-                            
-                            for char in plan['turntable']['characters']:
-                                char_name = char.get('name', '')
-                                if 'views' in char:
-                                    st.markdown(f"**{char_name}**")
-                                    progress_char = st.progress(0)
-                                    
-                                    for idx, view in enumerate(char['views']):
-                                        view_type = view.get('view_type', '')
-                                        tt_key = f"characters_{char_name}_{view_type}"
-                                        
-                                        final_prompt = view.get('prompt', '')
-                                        if use_json_profiles and 'json_profile' in char:
-                                            detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
-                                            if detailed:
-                                                final_prompt = f"{detailed}, {final_prompt}"
-                                        
-                                        img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
-                                        
-                                        if img:
-                                            if 'turntable_images' not in st.session_state:
-                                                st.session_state['turntable_images'] = {}
-                                            st.session_state['turntable_images'][tt_key] = img
-                                            st.toast(f"✅ {char_name} {view_type} 완료")
-                                        
-                                        progress_char.progress((idx + 1) / len(char['views']))
-                                        time.sleep(0.3)
-                        
-                        # 씬 이미지 생성
-                        if 'scenes' in plan:
-                            st.markdown("### 🎬 씬 이미지 자동 생성")
-                            scenes = plan['scenes']
-                            progress_sc = st.progress(0)
-                            
-                            for idx, scene in enumerate(scenes):
-                                scene_num = scene.get('scene_num', 0)
-                                
-                                base = scene.get('image_prompt', '')
-                                if use_json_profiles and 'used_turntables' in scene:
-                                    final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
-                                else:
-                                    final = base
-                                
-                                img, _ = try_generate_image_with_fallback(final, image_width, image_height, image_provider, max_retries)
-                                
-                                if img:
-                                    if 'generated_images' not in st.session_state:
-                                        st.session_state['generated_images'] = {}
-                                    st.session_state['generated_images'][scene_num] = img
-                                    st.toast(f"✅ Scene {scene_num} 완료")
-                                
-                                progress_sc.progress((idx + 1) / len(scenes))
-                                time.sleep(0.3)
-                    
+                    st.balloons()
                     time.sleep(1)
                     st.rerun()
-        
-        else:  # 수동 모드
-            st.session_state['manual_prompt'] = get_system_prompt(
-                topic, scene_count, story_opts, 
-                selected_genre, selected_visual, selected_music, use_json_profiles
-            )
-            st.session_state['use_json_profiles'] = use_json_profiles
-            st.session_state['image_width'] = image_width
-            st.session_state['image_height'] = image_height
-            st.rerun()
-
-# ------------------------------------------------------------------
-# 수동 모드 UI
-# ------------------------------------------------------------------
-
-if execution_mode == "수동 모드 (무제한)" and 'manual_prompt' in st.session_state:
-    st.markdown("---")
-    st.markdown("<div class='manual-box'>", unsafe_allow_html=True)
-    st.markdown("### 📋 수동 모드")
-    
-    st.markdown("**1️⃣ 프롬프트 복사**")
-    st.code(st.session_state['manual_prompt'], language="text")
-    
-    st.link_button("🚀 Gemini 열기", "https://gemini.google.com/", use_container_width=True)
-    
-    st.markdown("**2️⃣ 결과 붙여넣기**")
-    manual_input = st.text_area("JSON 결과", height=200, placeholder='```json\n...\n```')
-    
-    if st.button("✅ 결과 적용", use_container_width=True):
-        if not manual_input.strip():
-            st.warning("결과를 붙여넣어주세요")
         else:
-            try:
-                cleaned = clean_json_text(manual_input)
-                st.session_state['plan_data'] = json.loads(cleaned)
-                st.session_state['generated_images'] = {}
-                st.session_state['turntable_images'] = {}
-                st.success("✅ 로드 완료!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"오류: {e}")
+            # 수동 모드
+            st.session_state['manual_prompt'] = get_system_prompt(
+                topic, scene_count, story_opts,
+                selected_genre, selected_visual, selected_music,
+                use_json_profiles, expert_mode, seconds_per_scene
+            )
+            st.session_state['show_manual'] = True
+
+# 수동 모드 표시
+if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
+    st.markdown("---")
+    st.subheader("📋 수동 모드 - AI 프롬프트")
+    st.text_area("아래 프롬프트를 복사하여 ChatGPT, Claude, Gemini 등에 붙여넣으세요:", 
+                value=st.session_state['manual_prompt'], height=400)
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("### 📥 결과 붙여넣기")
+    manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")
+    
+    if st.button("✅ JSON 적용", type="primary"):
+        if manual_result:
+            try:
+                cleaned = clean_json_text(manual_result)
+                st.session_state['plan_data'] = json.loads(cleaned)
+                st.session_state['show_manual'] = False
+                st.success("✅ 적용 완료!")
+                st.rerun()
+            except json.JSONDecodeError as e:
+                st.error(f"JSON 파싱 오류: {e}")
 
 # ------------------------------------------------------------------
 # 결과 표시
 # ------------------------------------------------------------------
-
 if st.session_state.get('plan_data'):
     plan = st.session_state['plan_data']
     use_json = st.session_state.get('use_json_profiles', True)
@@ -948,13 +1415,20 @@ if st.session_state.get('plan_data'):
     img_height = st.session_state.get('image_height', 576)
     
     st.markdown("---")
+    st.header(f"🎬 {plan.get('project_title', 'Project')}")
+    if 'project_title_en' in plan:
+        st.caption(plan['project_title_en'])
     
-    # 저장
-    st.markdown("### 💾 저장")
-    col_save1, col_save2 = st.columns(2)
+    st.markdown(f"**컨셉:** {plan.get('logline', '')}")
+    if 'director_vision' in plan:
+        st.info(f"🎥 **Director's Vision:** {plan['director_vision']}")
+    
+    # 내보내기 버튼들
+    st.markdown("### 💾 프로젝트 저장")
+    col_save1, col_save2, col_save3, col_save4 = st.columns(4)
     with col_save1:
         st.download_button(
-            "📋 JSON 다운로드",
+            "📄 JSON",
             data=create_json_export(plan),
             file_name=f"{plan.get('project_title', 'project')}.json",
             mime="application/json",
@@ -962,10 +1436,28 @@ if st.session_state.get('plan_data'):
         )
     with col_save2:
         st.download_button(
-            "📝 TXT 프롬프트",
+            "📝 TXT",
             data=create_text_export(plan),
-            file_name=f"{plan.get('project_title', 'project')}_prompts.txt",
+            file_name=f"{plan.get('project_title', 'project')}.txt",
             mime="text/plain",
+            use_container_width=True
+        )
+    with col_save3:
+        st.download_button(
+            "🌐 HTML",
+            data=create_html_export(plan),
+            file_name=f"{plan.get('project_title', 'project')}.html",
+            mime="text/html",
+            use_container_width=True
+        )
+    with col_save4:
+        # Markdown 형식
+        md_content = f"# {plan.get('project_title', '')}\n\n{create_text_export(plan)}"
+        st.download_button(
+            "📋 Markdown",
+            data=md_content,
+            file_name=f"{plan.get('project_title', 'project')}.md",
+            mime="text/markdown",
             use_container_width=True
         )
     
@@ -974,154 +1466,156 @@ if st.session_state.get('plan_data'):
     # YouTube
     if 'youtube' in plan:
         st.markdown("## 📺 YouTube")
-        st.text_input("제목", value=plan['youtube'].get('title', ''), key="yt_t")
-        st.text_area("설명", value=plan['youtube'].get('description', ''), height=150, key="yt_d")
-        st.text_input("태그", value=plan['youtube'].get('hashtags', ''), key="yt_h")
+        yt = plan['youtube']
+        st.text_input("제목", value=yt.get('title', ''), key="yt_title")
+        st.text_area("설명", value=yt.get('description', ''), height=150, key="yt_desc")
+        st.text_input("태그", value=yt.get('hashtags', ''), key="yt_tags")
+        if 'thumbnail_concept' in yt:
+            st.info(f"🖼️ 썸네일 컨셉: {yt['thumbnail_concept']}")
     
     st.markdown("---")
     
-    # 음악
+    # 음악 / Suno (탭으로 분리)
     if 'music' in plan:
-        st.markdown("### 🎵 Suno AI")
-        with st.expander("🎼 Suno 프롬프트 (구조화)", expanded=False):
-            st.text_area("복사하세요", value=plan['music'].get('suno_prompt', ''), height=400, key="suno_p")
+        st.markdown("## 🎵 Music / Suno AI")
+        music = plan['music']
+        
+        suno_tabs = st.tabs(["🎹 통합 프롬프트", "🏷️ Style Tags", "🎤 Vocal", "🎸 Instruments", "🎛️ Production", "📜 Structure", "📝 Lyrics"])
+        
+        with suno_tabs[0]:
+            st.text_area("Suno 전체 프롬프트 (복사용)", 
+                        value=music.get('suno_prompt_combined', music.get('suno_prompt', '')), 
+                        height=400, key="suno_all")
+        
+        with suno_tabs[1]:
+            st.text_area("Style Tags", value=music.get('style_tags', ''), height=100, key="suno_style")
+        
+        with suno_tabs[2]:
+            st.text_area("Vocal Direction", value=music.get('vocal_direction', ''), height=100, key="suno_vocal")
+        
+        with suno_tabs[3]:
+            st.text_area("Instrumentation", value=music.get('instrumentation', ''), height=100, key="suno_inst")
+        
+        with suno_tabs[4]:
+            st.text_area("Production", value=music.get('production', ''), height=100, key="suno_prod")
+        
+        with suno_tabs[5]:
+            st.text_area("Song Structure", value=music.get('song_structure', ''), height=300, key="suno_struct")
+        
+        with suno_tabs[6]:
+            st.text_area("Complete Lyrics", value=music.get('lyrics_full', ''), height=300, key="suno_lyrics")
     
     st.markdown("---")
     
     # 턴테이블
-    if 'turntable' in plan and 'characters' in plan['turntable']:
-        st.markdown("### 🎭 턴테이블")
+    if 'turntable' in plan:
+        st.markdown("## 🎭 Turntable Reference Sheets")
         
-        # 한번에 모든 턴테이블 생성
-        if st.button("🎨 모든 턴테이블 이미지 생성", use_container_width=True, type="primary"):
-            progress_all = st.progress(0)
-            status_all = st.empty()
+        # 전체 생성 버튼
+        if st.button("🎨 모든 턴테이블 이미지 생성", use_container_width=True, type="primary", key="gen_all_tt"):
+            progress = st.progress(0)
+            status = st.empty()
             
-            total_views = sum(len(char.get('views', [])) for char in plan['turntable']['characters'])
+            total_views = 0
+            for cat in ['characters', 'locations', 'props', 'vehicles']:
+                if cat in plan['turntable']:
+                    for item in plan['turntable'][cat]:
+                        if 'views' in item:
+                            total_views += len(item['views'])
+            
             current = 0
-            
-            for char in plan['turntable']['characters']:
-                if 'views' in char:
-                    for view in char['views']:
-                        char_name = char.get('name', '')
-                        view_type = view.get('view_type', '')
-                        tt_key = f"characters_{char_name}_{view_type}"
-                        
-                        status_all.markdown(f"<div class='status-box'>생성 중: {char_name} - {view_type}</div>", unsafe_allow_html=True)
-                        
-                        final_prompt = view.get('prompt', '')
-                        if use_json and 'json_profile' in char:
-                            detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
-                            if detailed:
-                                final_prompt = f"{detailed}, {final_prompt}"
-                        
-                        img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
-                        
-                        if img:
-                            if 'turntable_images' not in st.session_state:
-                                st.session_state['turntable_images'] = {}
-                            st.session_state['turntable_images'][tt_key] = img
-                        
-                        current += 1
-                        progress_all.progress(current / total_views)
-                        time.sleep(0.3)
-            
-            status_all.markdown("<div class='status-box'>✅ 완료!</div>", unsafe_allow_html=True)
-            st.rerun()
-        
-        # 개별 턴테이블 표시
-        for char in plan['turntable']['characters']:
-            st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
-            st.markdown(f"**👤 {char.get('name', '')}** (ID: {char.get('id', '')})")
-            
-            if 'json_profile' in char:
-                with st.expander("📊 JSON 프로필"):
-                    st.json(char['json_profile'])
-            
-            if 'views' in char:
-                cols = st.columns(len(char['views']))
-                for idx, view in enumerate(char['views']):
-                    with cols[idx]:
-                        view_type = view.get('view_type', '')
-                        tt_key = f"characters_{char.get('name', '')}_{view_type}"
-                        
-                        st.caption(view_type.upper())
-                        
-                        if tt_key in st.session_state.get('turntable_images', {}):
-                            st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
-                        else:
-                            if st.button(f"📸", key=f"g_{tt_key}"):
+            for cat in ['characters', 'locations', 'props', 'vehicles']:
+                if cat in plan['turntable']:
+                    for item in plan['turntable'][cat]:
+                        if 'views' in item:
+                            for view in item['views']:
+                                item_name = item.get('name', '')
+                                view_type = view.get('view_type', '')
+                                tt_key = f"{cat}_{item.get('id', '')}_{view_type}"
+                                
+                                status.markdown(f"<div class='status-box'>생성 중: {item_name} - {view_type}</div>", unsafe_allow_html=True)
+                                
                                 final_prompt = view.get('prompt', '')
-                                if use_json and 'json_profile' in char:
-                                    detailed = json_profile_to_ultra_detailed_text(char['json_profile'])
+                                if use_json and 'json_profile' in item:
+                                    detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
                                     if detailed:
                                         final_prompt = f"{detailed}, {final_prompt}"
                                 
                                 img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                                
                                 if img:
                                     if 'turntable_images' not in st.session_state:
                                         st.session_state['turntable_images'] = {}
                                     st.session_state['turntable_images'][tt_key] = img
-                                    st.rerun()
+                                
+                                current += 1
+                                progress.progress(current / total_views)
+                                time.sleep(0.5)
             
-            st.markdown("</div>", unsafe_allow_html=True)
+            status.markdown("<div class='status-box'>✅ 턴테이블 생성 완료!</div>", unsafe_allow_html=True)
+            st.rerun()
         
-        st.markdown("---")
+        # 카테고리별 표시
+        for cat in ['characters', 'locations', 'props', 'vehicles']:
+            if cat in plan['turntable'] and plan['turntable'][cat]:
+                st.markdown(f"### {'👤' if cat=='characters' else '🏠' if cat=='locations' else '📦' if cat=='props' else '🚗'} {cat.upper()}")
+                
+                for item in plan['turntable'][cat]:
+                    st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
+                    st.markdown(f"**{item.get('name', '')}** (ID: {item.get('id', '')})")
+                    
+                    if 'json_profile' in item:
+                        with st.expander("📊 JSON 프로필"):
+                            st.json(item['json_profile'])
+                    
+                    if 'views' in item:
+                        cols = st.columns(min(len(item['views']), 4))
+                        for idx, view in enumerate(item['views']):
+                            with cols[idx % 4]:
+                                view_type = view.get('view_type', '')
+                                tt_key = f"{cat}_{item.get('id', '')}_{view_type}"
+                                
+                                st.caption(view_type.upper())
+                                
+                                if tt_key in st.session_state.get('turntable_images', {}):
+                                    st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
+                                else:
+                                    if st.button(f"📸", key=f"g_{tt_key}"):
+                                        final_prompt = view.get('prompt', '')
+                                        if use_json and 'json_profile' in item:
+                                            detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
+                                            if detailed:
+                                                final_prompt = f"{detailed}, {final_prompt}"
+                                        
+                                        with st.spinner("생성 중..."):
+                                            img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                                        if img:
+                                            if 'turntable_images' not in st.session_state:
+                                                st.session_state['turntable_images'] = {}
+                                            st.session_state['turntable_images'][tt_key] = img
+                                            st.rerun()
+                                
+                                with st.expander("프롬프트"):
+                                    st.code(view.get('prompt', ''), language=None)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
     
-    # 씬
-    st.markdown("### 🎬 스토리보드")
+    st.markdown("---")
     
-    # 한번에 모든 씬 생성
-    if st.button("🎨 모든 씬 이미지 생성", use_container_width=True, type="primary"):
-        scenes = plan.get('scenes', [])
-        progress_scenes = st.progress(0)
-        status_scenes = st.empty()
+    # 씬/스토리보드
+    if 'scenes' in plan:
+        st.markdown("## 🎬 Storyboard")
         
-        for idx, scene in enumerate(scenes):
-            scene_num = scene.get('scene_num', 0)
-            status_scenes.markdown(f"<div class='status-box'>Scene {scene_num} 생성 중...</div>", unsafe_allow_html=True)
+        # 전체 씬 생성 버튼
+        if st.button("🎨 모든 씬 이미지 생성", use_container_width=True, type="primary", key="gen_all_scenes"):
+            scenes = plan['scenes']
+            progress = st.progress(0)
+            status = st.empty()
             
-            base = scene.get('image_prompt', '')
-            if use_json and 'used_turntables' in scene:
-                final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
-            else:
-                final = base
-            
-            img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
-            
-            if img:
-                if 'generated_images' not in st.session_state:
-                    st.session_state['generated_images'] = {}
-                st.session_state['generated_images'][scene_num] = img
-            
-            progress_scenes.progress((idx + 1) / len(scenes))
-            time.sleep(0.3)
-        
-        status_scenes.markdown("<div class='status-box'>✅ 완료!</div>", unsafe_allow_html=True)
-        st.rerun()
-    
-    # 개별 씬 표시
-    for scene in plan.get('scenes', []):
-        scene_num = scene.get('scene_num', 0)
-        
-        st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
-        
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.markdown(f"**Scene {scene_num}** - {scene.get('timecode', '')}")
-            if 'used_turntables' in scene and scene['used_turntables']:
-                for tt in scene['used_turntables']:
-                    st.markdown(f"<span class='turntable-tag'>🎭 {tt}</span>", unsafe_allow_html=True)
-        with col2:
-            if scene_num in st.session_state.get('generated_images', {}):
-                if st.button("🔄", key=f"r_s_{scene_num}"):
-                    del st.session_state['generated_images'][scene_num]
-                    st.rerun()
-        
-        if scene_num in st.session_state.get('generated_images', {}):
-            st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
-        else:
-            if st.button(f"📸 촬영", key=f"g_s_{scene_num}"):
+            for idx, scene in enumerate(scenes):
+                scene_num = scene.get('scene_num', idx+1)
+                status.markdown(f"<div class='status-box'>Scene {scene_num} 생성 중...</div>", unsafe_allow_html=True)
+                
                 base = scene.get('image_prompt', '')
                 if use_json and 'used_turntables' in scene:
                     final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
@@ -1129,16 +1623,76 @@ if st.session_state.get('plan_data'):
                     final = base
                 
                 img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+                
                 if img:
                     if 'generated_images' not in st.session_state:
                         st.session_state['generated_images'] = {}
                     st.session_state['generated_images'][scene_num] = img
-                    st.rerun()
+                
+                progress.progress((idx + 1) / len(scenes))
+                time.sleep(0.5)
+            
+            status.markdown("<div class='status-box'>✅ 씬 이미지 생성 완료!</div>", unsafe_allow_html=True)
+            st.rerun()
         
-        st.write(f"**액션:** {scene.get('action', '')}")
-        st.write(f"**카메라:** {scene.get('camera', '')}")
-        
-        with st.expander("프롬프트"):
-            st.code(scene.get('image_prompt', ''))
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+        # 개별 씬 표시
+        for scene in plan.get('scenes', []):
+            scene_num = scene.get('scene_num', 0)
+            
+            st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**Scene {scene_num}** - {scene.get('timecode', '')}")
+                if 'act' in scene:
+                    st.caption(f"Act {scene['act']} | {scene.get('beat', '')}")
+                if 'used_turntables' in scene and scene['used_turntables']:
+                    for tt in scene['used_turntables']:
+                        st.markdown(f"<span class='turntable-tag'>🎭 {tt}</span>", unsafe_allow_html=True)
+            with col2:
+                if scene_num in st.session_state.get('generated_images', {}):
+                    if st.button("🔄", key=f"r_s_{scene_num}"):
+                        del st.session_state['generated_images'][scene_num]
+                        st.rerun()
+            
+            # 이미지 표시 또는 생성 버튼
+            if scene_num in st.session_state.get('generated_images', {}):
+                st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+            else:
+                if st.button(f"📸 이미지 생성", key=f"g_s_{scene_num}"):
+                    base = scene.get('image_prompt', '')
+                    if use_json and 'used_turntables' in scene:
+                        final = apply_json_profiles_to_prompt(base, scene['used_turntables'], plan.get('turntable', {}))
+                    else:
+                        final = base
+                    
+                    with st.spinner("생성 중..."):
+                        img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+                    if img:
+                        if 'generated_images' not in st.session_state:
+                            st.session_state['generated_images'] = {}
+                        st.session_state['generated_images'][scene_num] = img
+                        st.rerun()
+            
+            # 씬 정보
+            st.write(f"**액션:** {scene.get('action', '')}")
+            if 'camera' in scene:
+                if isinstance(scene['camera'], dict):
+                    cam = scene['camera']
+                    st.write(f"**카메라:** {cam.get('shot_type', '')} | {cam.get('movement', '')} | {cam.get('lens', '')} | {cam.get('angle', '')}")
+                else:
+                    st.write(f"**카메라:** {scene['camera']}")
+            if 'emotion' in scene:
+                st.write(f"**감정:** {scene['emotion']}")
+            
+            with st.expander("🖼️ 이미지 프롬프트"):
+                st.code(scene.get('image_prompt', ''))
+            
+            with st.expander("🎬 비디오 프롬프트"):
+                st.code(scene.get('video_prompt', ''))
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+
+# Footer
+st.markdown("---")
+st.caption("🎬 AI MV Director Pro | Powered by Gemini & Pollinations")

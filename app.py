@@ -882,7 +882,7 @@ RETURN THIS EXACT JSON STRUCTURE:
       }},
       "lighting": "Lighting setup description",
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [detailed scene description with all visual elements]",
+      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [SCENE ACTION], [CAMERA ANGLE], [LIGHTING], (Note: Do NOT write the character appearance details here. The system will automatically inject the FULL 'json_profile' details based on the used_turntables ID. Focus this prompt on the action and environment composition only.)",
       "video_prompt": "Motion and camera movement description for video generation",
       "audio_sync": "What musical element this syncs to"
     }}
@@ -894,117 +894,202 @@ Each scene timecode should reflect {seconds_per_scene} second duration.
 Ensure visual and narrative coherence throughout."""
 
 # ------------------------------------------------------------------
-# JSON 프로필 텍스트 변환
+# JSON 프로필 텍스트 변환 (개선된 버전)
 # ------------------------------------------------------------------
 def json_profile_to_ultra_detailed_text(profile):
-    """JSON 프로필을 상세 텍스트로 변환"""
+    """JSON 프로필의 모든 중첩 필드를 상세 텍스트로 변환"""
     parts = []
     
     if not isinstance(profile, dict):
         return ""
     
-    # Physical
+    # 1. PHYSICAL (Physical Appearance)
     if 'physical' in profile and isinstance(profile['physical'], dict):
         phys = profile['physical']
-        phys_parts = []
-        if 'age' in phys: phys_parts.append(f"{phys['age']} years old")
-        if 'height_cm' in phys: phys_parts.append(f"{phys['height_cm']}cm tall")
-        if 'body_type' in phys: phys_parts.append(phys['body_type'])
-        if 'skin_tone' in phys: phys_parts.append(f"skin tone {phys['skin_tone']}")
-        if 'skin_texture' in phys: phys_parts.append(f"{phys['skin_texture']} skin texture")
-        if phys_parts: parts.append(", ".join(phys_parts))
+        phys_desc = []
+        if 'age' in phys: phys_desc.append(f"Age: {phys['age']}")
+        if 'height_cm' in phys: phys_desc.append(f"Height: {phys['height_cm']}cm")
+        if 'body_type' in phys: phys_desc.append(f"Body: {phys['body_type']}")
+        if 'skin_tone' in phys: phys_desc.append(f"Skin Tone: {phys['skin_tone']}")
+        if 'skin_texture' in phys: phys_desc.append(f"Skin Texture: {phys['skin_texture']}")
+        if phys_desc: parts.append("PHYSICAL[" + ", ".join(phys_desc) + "]")
     
-    # Face
+    # 2. FACE (Facial Details)
     if 'face' in profile and isinstance(profile['face'], dict):
         face = profile['face']
-        face_parts = []
-        if 'shape' in face: face_parts.append(f"{face['shape']} face")
+        face_desc = []
+        if 'shape' in face: face_desc.append(f"Face Shape: {face['shape']}")
+        
         if 'eyes' in face and isinstance(face['eyes'], dict):
             eyes = face['eyes']
-            eye_desc = []
-            if 'color' in eyes: eye_desc.append(f"{eyes['color']} colored")
-            if 'shape' in eyes: eye_desc.append(eyes['shape'])
-            if eye_desc: face_parts.append(f"eyes ({', '.join(eye_desc)})")
-        if 'nose' in face: face_parts.append(f"{face['nose']} nose")
-        if 'lips' in face:
-            if isinstance(face['lips'], dict):
-                lip_desc = []
-                if 'color' in face['lips']: lip_desc.append(face['lips']['color'])
-                if 'shape' in face['lips']: lip_desc.append(face['lips']['shape'])
-                if lip_desc: face_parts.append(f"lips ({', '.join(lip_desc)})")
-        if 'jawline' in face: face_parts.append(f"{face['jawline']} jawline")
-        if face_parts: parts.append(", ".join(face_parts))
+            eye_str = []
+            if 'color' in eyes: eye_str.append(f"{eyes['color']}")
+            if 'shape' in eyes: eye_str.append(eyes['shape'])
+            if 'size' in eyes: eye_str.append(eyes['size'])
+            if 'special' in eyes: eye_str.append(eyes['special'])
+            face_desc.append(f"Eyes: {' '.join(eye_str)}")
+            
+        if 'lips' in face and isinstance(face['lips'], dict):
+            lips = face['lips']
+            lip_str = []
+            if 'color' in lips: lip_str.append(lips['color'])
+            if 'shape' in lips: lip_str.append(lips['shape'])
+            if 'texture' in lips: lip_str.append(lips['texture'])
+            face_desc.append(f"Lips: {' '.join(lip_str)}")
+            
+        if 'nose' in face: face_desc.append(f"Nose: {face['nose']}")
+        if 'jawline' in face: face_desc.append(f"Jawline: {face['jawline']}")
+        if 'skin_details' in face: face_desc.append(f"Face Details: {face['skin_details']}")
+        
+        if face_desc: parts.append("FACE[" + ", ".join(face_desc) + "]")
     
-    # Hair
+    # 3. HAIR (Hair Details)
     if 'hair' in profile and isinstance(profile['hair'], dict):
         hair = profile['hair']
-        hair_parts = []
-        if 'color_primary' in hair: hair_parts.append(f"{hair['color_primary']} hair")
-        if 'length_cm' in hair: hair_parts.append(f"{hair['length_cm']}cm length")
-        if 'style' in hair: hair_parts.append(hair['style'])
-        if 'texture' in hair: hair_parts.append(f"{hair['texture']} texture")
-        if hair_parts: parts.append("hair: " + ", ".join(hair_parts))
+        hair_desc = []
+        if 'color_primary' in hair: hair_desc.append(f"Color: {hair['color_primary']}")
+        if 'color_secondary' in hair: hair_desc.append(f"Highlights: {hair['color_secondary']}")
+        if 'length_cm' in hair: hair_desc.append(f"Length: {hair['length_cm']}cm")
+        if 'style' in hair: hair_desc.append(f"Style: {hair['style']}")
+        if 'texture' in hair: hair_desc.append(f"Texture: {hair['texture']}")
+        if hair_desc: parts.append("HAIR[" + ", ".join(hair_desc) + "]")
     
-    # Clothing
+    # 4. CLOTHING (Detailed Outfit)
     if 'clothing' in profile and isinstance(profile['clothing'], dict):
         cloth = profile['clothing']
+        outfit_desc = []
         for piece in ['top', 'bottom', 'shoes', 'outerwear']:
             if piece in cloth and isinstance(cloth[piece], dict):
                 item = cloth[piece]
-                item_parts = []
-                if 'type' in item: item_parts.append(item['type'])
-                if 'color' in item: item_parts.append(f"color {item['color']}")
-                if 'material' in item: item_parts.append(item['material'])
-                if item_parts: parts.append(f"{piece}: {', '.join(item_parts)}")
+                item_details = []
+                if 'color' in item: item_details.append(item['color'])
+                if 'material' in item: item_details.append(item['material'])
+                if 'type' in item: item_details.append(item['type'])
+                if 'fit' in item: item_details.append(f"fit: {item['fit']}")
+                if 'details' in item: item_details.append(f"detail: {item['details']}")
+                if item_details:
+                    outfit_desc.append(f"{piece.upper()}: {' '.join(item_details)}")
+        if outfit_desc: parts.append("OUTFIT[" + ", ".join(outfit_desc) + "]")
     
-    # Accessories
-    if 'accessories' in profile and isinstance(profile['accessories'], list):
-        if profile['accessories']:
-            parts.append(f"accessories: {', '.join(profile['accessories'])}")
+    # 5. ACCESSORIES & FEATURES
+    if 'accessories' in profile and isinstance(profile['accessories'], list) and profile['accessories']:
+        parts.append("ACCESSORIES[" + ", ".join(profile['accessories']) + "]")
     
-    # Location specific
+    if 'distinctive_features' in profile and isinstance(profile['distinctive_features'], list) and profile['distinctive_features']:
+        parts.append("FEATURES[" + ", ".join(profile['distinctive_features']) + "]")
+        
+    # 6. LOCATION / ENVIRONMENT
     if 'location_type' in profile:
-        parts.append(profile['location_type'])
+        loc_desc = [f"Type: {profile['location_type']}"]
+        
+        if 'architecture' in profile and isinstance(profile['architecture'], dict):
+            arch = profile['architecture']
+            if 'style' in arch: loc_desc.append(f"Style: {arch['style']}")
+            if 'materials' in arch and isinstance(arch['materials'], list): 
+                loc_desc.append(f"Materials: {', '.join(arch['materials'])}")
+        
+        if 'lighting' in profile and isinstance(profile['lighting'], dict):
+            light = profile['lighting']
+            light_strs = []
+            if 'time' in light: light_strs.append(f"Time: {light['time']}")
+            if 'color_temperature' in light: light_strs.append(light['color_temperature'])
+            if 'key_color' in light: light_strs.append(f"Key: {light['key_color']}")
+            if 'fill_color' in light: light_strs.append(f"Fill: {light['fill_color']}")
+            if 'special_effects' in light: light_strs.append(light['special_effects'])
+            loc_desc.append(f"LIGHTING: {' '.join(light_strs)}")
+            
+        if 'weather' in profile and isinstance(profile['weather'], dict):
+            w = profile['weather']
+            w_strs = []
+            if 'condition' in w: w_strs.append(w['condition'])
+            if 'humidity_percent' in w: w_strs.append(f"Humidity: {w['humidity_percent']}%")
+            loc_desc.append(f"WEATHER: {' '.join(w_strs)}")
+            
+        if 'color_palette' in profile and isinstance(profile['color_palette'], dict):
+            cp = profile['color_palette']
+            cp_strs = []
+            if 'dominant' in cp: cp_strs.append(f"Dom: {cp['dominant']}")
+            if 'secondary' in cp: cp_strs.append(f"Sec: {cp['secondary']}")
+            if 'accent' in cp: cp_strs.append(f"Acc: {cp['accent']}")
+            loc_desc.append(f"PALETTE: {' '.join(cp_strs)}")
+            
+        if 'atmosphere' in profile: loc_desc.append(f"Mood: {profile['atmosphere']}")
+        parts.append("LOCATION[" + " | ".join(loc_desc) + "]")
+
+    # 7. PROPS / VEHICLES
+    if 'make' in profile and 'model' in profile: # Vehicle
+        veh_desc = f"VEHICLE[{profile.get('color', '')} {profile.get('make', '')} {profile.get('model', '')}, {profile.get('year', '')}]"
+        parts.append(veh_desc)
+        
+    if 'dimensions' in profile: # Prop
+        prop_desc = f"PROP[{profile.get('color', '')} {profile.get('material', '')} {profile.get('name', '')}, {profile.get('finish', '')} finish]"
+        parts.append(prop_desc)
     
-    if 'lighting' in profile and isinstance(profile['lighting'], dict):
-        light = profile['lighting']
-        light_parts = []
-        if 'time' in light: light_parts.append(f"time {light['time']}")
-        if 'color_temperature' in light: light_parts.append(f"{light['color_temperature']}K")
-        if 'key_color' in light: light_parts.append(f"key light {light['key_color']}")
-        if light_parts: parts.append("lighting: " + ", ".join(light_parts))
-    
-    if 'atmosphere' in profile:
-        parts.append(f"{profile['atmosphere']} atmosphere")
-    
-    if 'weather' in profile and isinstance(profile['weather'], dict):
-        weather = profile['weather']
-        if 'condition' in weather:
-            parts.append(f"{weather['condition']} weather")
-    
-    return ", ".join([p for p in parts if p])
+    return " ".join(parts)
 
 def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
-    """JSON 프로필을 프롬프트에 적용"""
+    """JSON 프로필을 프롬프트에 강력하게 주입"""
     if not used_turntables or not turntable_data:
         return base_prompt
     
-    profile_parts = []
+    character_profiles = []
+    location_profiles = []
+    object_profiles = []
     
     for tt_ref in used_turntables:
-        for category in ['characters', 'locations', 'props', 'vehicles']:
-            if category in turntable_data:
-                for item in turntable_data[category]:
+        found = False
+        # 캐릭터
+        if 'characters' in turntable_data:
+            for item in turntable_data['characters']:
+                if item.get('id') == tt_ref:
+                    name = item.get('name_en', item.get('name', 'Character'))
+                    if 'json_profile' in item:
+                        detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
+                        if detailed:
+                            # 캐릭터 이름과 상세 스펙을 묶어서 전달
+                            character_profiles.append(f"({name}: {detailed})")
+                    found = True
+                    break
+        if found: continue
+
+        # 장소
+        if 'locations' in turntable_data:
+            for item in turntable_data['locations']:
+                if item.get('id') == tt_ref:
+                    if 'json_profile' in item:
+                        detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
+                        if detailed:
+                            location_profiles.append(detailed)
+                    found = True
+                    break
+        if found: continue
+        
+        # 소품/차량
+        for cat in ['props', 'vehicles']:
+            if cat in turntable_data:
+                for item in turntable_data[cat]:
                     if item.get('id') == tt_ref:
-                        if 'json_profile' in item:
+                         if 'json_profile' in item:
                             detailed = json_profile_to_ultra_detailed_text(item['json_profile'])
                             if detailed:
-                                profile_parts.append(detailed)
-                        break
+                                object_profiles.append(detailed)
+                         break
+
+    # 프롬프트 조합: 캐릭터 스펙 -> 장소 스펙 -> 액션(기본 프롬프트)
+    final_parts = []
     
-    if profile_parts:
-        return ", ".join(profile_parts) + ", " + base_prompt
-    return base_prompt
+    if character_profiles:
+        final_parts.append("**CHARACTERS:** " + ", ".join(character_profiles))
+    
+    if location_profiles:
+        final_parts.append("**LOCATION:** " + " | ".join(location_profiles))
+        
+    if object_profiles:
+        final_parts.append("**OBJECTS:** " + ", ".join(object_profiles))
+        
+    final_parts.append("**SCENE ACTION:** " + base_prompt)
+    
+    return "\n".join(final_parts)
 
 # ------------------------------------------------------------------
 # 내보내기 함수들
@@ -1686,7 +1771,11 @@ if st.session_state.get('plan_data'):
                 st.write(f"**감정:** {scene['emotion']}")
             
             with st.expander("🖼️ 이미지 프롬프트"):
-                st.code(scene.get('image_prompt', ''))
+                # 실제 생성에 사용될 최종 프롬프트 표시
+                final_debug = scene.get('image_prompt', '')
+                if use_json and 'used_turntables' in scene:
+                    final_debug = apply_json_profiles_to_prompt(final_debug, scene['used_turntables'], plan.get('turntable', {}))
+                st.code(final_debug)
             
             with st.expander("🎬 비디오 프롬프트"):
                 st.code(scene.get('video_prompt', ''))

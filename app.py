@@ -296,13 +296,20 @@ with st.sidebar:
         gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
-    st.subheader("🎨 이미지 생성")
-    auto_generate = st.checkbox("자동 이미지 생성", value=False)
+    # --- [수정됨] 이미지 생성 설정 (붙여넣은 코드 적용) ---
+    st.subheader("🎨 이미지 생성 설정")
+    
+    auto_generate = st.checkbox("자동 이미지 생성", value=True)
     infinite_retry = st.checkbox("무한 재시도", value=False)
-    image_provider = st.selectbox("엔진", ["Pollinations Flux", "Pollinations Turbo ⚡"], index=0)
+    
+    image_provider = st.selectbox(
+        "이미지 엔진",
+        ["Segmind (안정)", "Pollinations Turbo ⚡", "Pollinations Flux"],
+        index=0
+    )
     
     if not infinite_retry:
-        max_retries = st.slider("재시도", 1, 10, 3)
+        max_retries = st.slider("재시도 횟수", 1, 10, 3)
     else:
         max_retries = 999
 
@@ -1270,27 +1277,23 @@ def create_html_export(plan_data):
     return html
 
 # ------------------------------------------------------------------
-# 이미지 생성
+# [수정됨] 이미지 생성 (붙여넣은 코드 적용)
 # ------------------------------------------------------------------
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
-    
-    if "Flux" in provider:
-        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
-    else:
-        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
+    enhanced = f"{prompt}, cinematic, high quality"
+    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
     
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, timeout=90)
+            response = requests.get(url, timeout=60)
             if response.status_code == 200 and len(response.content) > 1000:
                 img = Image.open(BytesIO(response.content))
                 if img.size[0] > 100:
                     return img, provider
-        except Exception as e:
+        except:
             pass
         if attempt < max_retries - 1:
-            time.sleep(2)
+            time.sleep(1)
     return None, None
 
 # ------------------------------------------------------------------

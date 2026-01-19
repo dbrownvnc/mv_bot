@@ -45,6 +45,13 @@ st.markdown("""
         padding: 20px;
         margin: 20px 0;
     }
+    .trend-box {
+        background-color: #e6f7ff;
+        border: 2px solid #1890ff;
+        border-radius: 12px;
+        padding: 15px;
+        margin: 10px 0;
+    }
     .stButton>button {
         width: 100%;
         border-radius: 8px;
@@ -94,6 +101,65 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 유튜브 트렌드 알고리즘 ---
+TRENDING_KEYWORDS = {
+    "emotions": ["heartbreak", "hope", "nostalgia", "euphoria", "melancholy", "rage", "peace", "anxiety", "joy", "loneliness"],
+    "settings": ["neon city", "abandoned subway", "rooftop at dawn", "underwater palace", "desert highway", "floating islands", "dystopian Tokyo", "cyberpunk Seoul", "ancient temple", "space station"],
+    "characters": ["lonely hacker", "rebel artist", "time traveler", "android musician", "street dancer", "wandering poet", "revenge seeker", "fallen angel", "lost astronaut", "phantom thief"],
+    "aesthetics": ["retro 80s", "vaporwave dreams", "dark academia", "y2k nostalgia", "minimalist void", "baroque luxury", "glitch art", "neon noir", "pastel goth", "cyberpunk"],
+    "actions": ["running through rain", "dancing in fire", "flying over city", "drowning in memories", "breaking free", "searching for light", "falling through time", "rising from ashes", "chasing shadows", "embracing the void"],
+    "times": ["midnight", "golden hour", "endless night", "frozen moment", "parallel timeline", "infinite loop", "last sunrise", "first snowfall", "summer's end", "dawn of chaos"],
+    "trends_2025": ["AI awakening", "metaverse escape", "climate dystopia", "gen-z rebellion", "digital detox", "virtual romance", "blockchain dreams", "quantum love", "hologram memories", "synthetic emotions"]
+}
+
+def generate_trending_topic():
+    """유튜브 트렌드 기반 랜덤 주제 생성"""
+    templates = [
+        "{character} experiencing {emotion} in a {setting} during {time}, {aesthetic} style, {action}",
+        "{emotion} journey of a {character} in {setting}, {aesthetic} vibes, {trend}",
+        "{action} through a {setting} at {time}, feeling {emotion}, {aesthetic} aesthetic",
+        "{character} {action} in a {aesthetic} {setting}, exploring themes of {emotion} and {trend}",
+        "A story of {emotion} and {trend}, featuring a {character} in a {setting} during {time}"
+    ]
+    
+    template = random.choice(templates)
+    
+    topic = template.format(
+        emotion=random.choice(TRENDING_KEYWORDS["emotions"]),
+        setting=random.choice(TRENDING_KEYWORDS["settings"]),
+        character=random.choice(TRENDING_KEYWORDS["characters"]),
+        aesthetic=random.choice(TRENDING_KEYWORDS["aesthetics"]),
+        action=random.choice(TRENDING_KEYWORDS["actions"]),
+        time=random.choice(TRENDING_KEYWORDS["times"]),
+        trend=random.choice(TRENDING_KEYWORDS["trends_2025"])
+    )
+    
+    return topic
+
+def get_viral_topic_with_ai(api_key, model_name):
+    """AI를 사용하여 바이럴 주제 생성"""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        
+        prompt = """Generate ONE highly viral, trendy music video concept for 2025 YouTube.
+
+Requirements:
+- Emotionally compelling and visually striking
+- Incorporates current trends: AI, nostalgia, mental health, climate, Gen-Z culture
+- Cinematic and shareable
+- 1-2 sentences maximum
+
+Format: Just the concept, no explanation.
+
+Example: "A lonely AI artist painting holographic memories in an abandoned metaverse gallery at midnight, searching for the last human connection before the digital apocalypse"
+"""
+        
+        response = model.generate_content(prompt)
+        return response.text.strip().strip('"')
+    except:
+        return generate_trending_topic()
 
 # --- API 키 로드 ---
 def get_api_key(key_name):
@@ -218,10 +284,44 @@ if 'total_duration' not in st.session_state:
     st.session_state.total_duration = 60
 if 'seconds_per_scene' not in st.session_state:
     st.session_state.seconds_per_scene = 5
+if 'random_topic' not in st.session_state:
+    st.session_state.random_topic = ""
 
 with st.expander("📝 프로젝트 설정 (터치하여 열기)", expanded=True):
+    # 트렌드 주제 생성 버튼
+    st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
+    st.markdown("### 🔥 바이럴 주제 생성기")
+    
+    col_trend1, col_trend2 = st.columns(2)
+    
+    with col_trend1:
+        if st.button("🎲 랜덤 트렌드 주제 생성", use_container_width=True):
+            st.session_state.random_topic = generate_trending_topic()
+            st.toast("🔥 트렌디한 주제 생성 완료!")
+            st.rerun()
+    
+    with col_trend2:
+        if st.button("🤖 AI 바이럴 주제 생성", use_container_width=True):
+            if gemini_key and gemini_model:
+                with st.spinner("AI가 바이럴 주제를 생성 중..."):
+                    st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
+                    st.toast("🤖 AI 바이럴 주제 생성 완료!")
+                    st.rerun()
+            else:
+                st.warning("API 키를 먼저 입력해주세요!")
+    
+    if st.session_state.random_topic:
+        st.info(f"💡 생성된 주제: {st.session_state.random_topic}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
     with st.form("project_form"):
-        topic = st.text_area("영상 주제를 입력하세요", height=80, placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사")
+        topic = st.text_area(
+            "영상 주제를 입력하세요", 
+            height=100, 
+            value=st.session_state.random_topic if st.session_state.random_topic else "",
+            placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사\n\n또는 위의 '바이럴 주제 생성' 버튼을 사용하세요!"
+        )
         
         # 장르 및 스타일 선택
         col_genre1, col_genre2, col_genre3 = st.columns(3)
@@ -407,133 +507,17 @@ def get_system_prompt(topic, scene_count, options, genre, visual_style, music_ge
     - Genre-appropriate tone throughout: {genre}
     """
 
-def get_youtube_metadata_prompt(plan_data):
-    """유튜브 메타데이터만 별도 생성"""
-    return f"""
-    Create viral-optimized YouTube metadata for this AI-generated music video:
-    
-    Title: {plan_data['project_title']}
-    Concept: {plan_data['logline']}
-    
-    Generate JSON:
-    {{
-      "title": "Viral English title (50-60 chars) with emotional hook + '| AI Generated' at end",
-      "description": "SEO-optimized description (250-300 words) including: hook paragraph, scene timestamps, emotional journey, technical details, call-to-action, subtle AI disclosure",
-      "hashtags": "30, viral, trending, keywords, separated, by, commas, no, hash, symbols, optimized, for, discovery"
-    }}
-    
-    Title formula: [Emotional Hook] + [Core Concept] + [Intrigue] | AI Generated
-    Example: "Lost in Neon Dreams - A Cyberpunk Love Story That Will Break Your Heart | AI Generated"
-    """
-
 # ------------------------------------------------------------------
-# 1. API 자동 실행 로직
-# ------------------------------------------------------------------
-def generate_with_fallback(prompt, api_key, start_model):
-    genai.configure(api_key=api_key)
-    fallback_chain = [start_model]
-    backups = ["gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
-    for b in backups:
-        if b != start_model: fallback_chain.append(b)
-            
-    last_error = None
-    for model_name in fallback_chain:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            time.sleep(1) 
-            return response.text, model_name 
-        except Exception as e:
-            last_error = e
-            time.sleep(0.5)
-            continue
-    raise Exception(f"All models failed. Last Error: {last_error}")
-
-def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre):
-    try:
-        prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre)
-        response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
-        return json.loads(clean_json_text(response_text))
-    except Exception as e:
-        st.error(f"기획안 생성 실패: {e}")
-        return None
-
-# ------------------------------------------------------------------
-# 2. 향상된 이미지 생성 로직 (무한 재시도 지원)
+# 저장 함수들
 # ------------------------------------------------------------------
 
-def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    """
-    선택된 엔진으로 이미지 생성 시도 (무한 재시도 지원)
-    """
-    enhanced_prompt = f"{prompt}, cinematic, high quality, detailed, professional"
-    
-    # 엔진별 엔드포인트
-    if provider == "Pollinations Turbo (초고속) ⚡":
-        endpoints = [
-            {
-                'name': 'Pollinations-Turbo',
-                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&model=turbo&seed={random.randint(0,999999)}"
-            }
-        ]
-    elif provider == "Pollinations Flux (고품질)":
-        endpoints = [
-            {
-                'name': 'Pollinations-Flux',
-                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&model=flux&seed={random.randint(0,999999)}"
-            }
-        ]
-    elif provider == "Hugging Face Schnell (빠름)":
-        endpoints = [
-            {
-                'name': 'HF-Schnell',
-                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-            }
-        ]
-    else:  # Image.AI, Segmind
-        endpoints = [
-            {
-                'name': provider,
-                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-            }
-        ]
-    
-    # 공통 폴백
-    fallback_endpoints = [
-        {
-            'name': 'Pollinations-Alt',
-            'url': f"https://pollinations.ai/p/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}"
-        }
-    ]
-    
-    all_endpoints = endpoints + fallback_endpoints
-    
-    attempt = 0
-    while attempt < max_retries:
-        for endpoint in all_endpoints:
-            try:
-                response = requests.get(endpoint['url'], timeout=60)
-                
-                if response.status_code == 200 and len(response.content) > 1000:
-                    img = Image.open(BytesIO(response.content))
-                    if img.size[0] > 100 and img.size[1] > 100:
-                        return img, endpoint['name']
-            except Exception as e:
-                continue
-        
-        attempt += 1
-        if attempt < max_retries:
-            time.sleep(1)
-    
-    return None, None
-
-# ------------------------------------------------------------------
-# 3. 저장 기능
-# ------------------------------------------------------------------
-
-def create_html_export(plan_data, images_dict, turntable_dict):
+def create_html_export(plan_data, images_dict=None, turntable_dict=None):
     """HTML 형식으로 전체 프로젝트 저장"""
+    if images_dict is None:
+        images_dict = {}
+    if turntable_dict is None:
+        turntable_dict = {}
+        
     html_content = f"""
     <!DOCTYPE html>
     <html lang="ko">
@@ -654,7 +638,6 @@ def create_html_export(plan_data, images_dict, turntable_dict):
                     html_content += f'<div class="turntable"><h4>{item["name"]}</h4>'
                     
                     if tt_key in turntable_dict:
-                        # 이미지를 base64로 인코딩
                         buffered = BytesIO()
                         turntable_dict[tt_key].save(buffered, format="PNG")
                         img_str = base64.b64encode(buffered.getvalue()).decode()
@@ -775,6 +758,219 @@ VIDEO PROMPT:
     
     return text
 
+def create_markdown_export(plan_data):
+    """마크다운 형식으로 저장"""
+    md_content = f"""# 🎬 {plan_data['project_title']}
+
+> {plan_data['logline']}
+
+*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+
+---
+
+## 📺 YouTube Metadata
+
+### Title
+```
+{plan_data.get('youtube', {}).get('title', 'N/A')}
+```
+
+### Description
+```
+{plan_data.get('youtube', {}).get('description', 'N/A')}
+```
+
+### Hashtags
+```
+{plan_data.get('youtube', {}).get('hashtags', 'N/A')}
+```
+
+---
+
+## 🎵 Music
+
+**Style:** {plan_data['music']['style']}
+
+### Suno AI Prompt
+```
+{plan_data['music']['suno_prompt']}
+```
+
+---
+
+## 🎨 Visual Style
+
+{plan_data['visual_style']['description']}
+
+### Character Design
+```
+{plan_data['visual_style']['character_prompt']}
+```
+
+---
+
+"""
+    
+    # 턴테이블
+    if 'turntable' in plan_data:
+        md_content += "## 🎭 Turntable References\n\n"
+        
+        for category in ['characters', 'backgrounds', 'objects']:
+            if category in plan_data['turntable'] and plan_data['turntable'][category]:
+                icon = "👤" if category == "characters" else "🏙️" if category == "backgrounds" else "📦"
+                md_content += f"### {icon} {category.title()}\n\n"
+                
+                for item in plan_data['turntable'][category]:
+                    md_content += f"**{item['name']}**\n```\n{item['prompt']}\n```\n\n"
+    
+    # 씬들
+    md_content += "## 🎬 Storyboard\n\n"
+    
+    for scene in plan_data['scenes']:
+        md_content += f"""### Scene {scene['scene_num']} - {scene['timecode']}
+
+**Action:** {scene['action']}
+
+**Camera:** {scene['camera']}
+
+**Image Prompt:**
+```
+{scene['image_prompt']}
+```
+
+**Video Prompt:**
+```
+{scene.get('video_prompt', 'N/A')}
+```
+
+---
+
+"""
+    
+    return md_content
+
+def create_csv_export(plan_data):
+    """CSV 형식으로 씬 정보 저장"""
+    import csv
+    from io import StringIO
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # 헤더
+    writer.writerow(['Scene', 'Timecode', 'Action', 'Camera', 'Image Prompt', 'Video Prompt'])
+    
+    # 씬 데이터
+    for scene in plan_data['scenes']:
+        writer.writerow([
+            scene['scene_num'],
+            scene['timecode'],
+            scene['action'],
+            scene['camera'],
+            scene['image_prompt'],
+            scene.get('video_prompt', 'N/A')
+        ])
+    
+    return output.getvalue()
+
+# ------------------------------------------------------------------
+# 1. API 자동 실행 로직
+# ------------------------------------------------------------------
+def generate_with_fallback(prompt, api_key, start_model):
+    genai.configure(api_key=api_key)
+    fallback_chain = [start_model]
+    backups = ["gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-flash-latest"]
+    for b in backups:
+        if b != start_model: fallback_chain.append(b)
+            
+    last_error = None
+    for model_name in fallback_chain:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            time.sleep(1) 
+            return response.text, model_name 
+        except Exception as e:
+            last_error = e
+            time.sleep(0.5)
+            continue
+    raise Exception(f"All models failed. Last Error: {last_error}")
+
+def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre):
+    try:
+        prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre)
+        response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
+        st.toast(f"✅ 기획 생성 완료 (Used: {used_model})")
+        return json.loads(clean_json_text(response_text))
+    except Exception as e:
+        st.error(f"기획안 생성 실패: {e}")
+        return None
+
+# ------------------------------------------------------------------
+# 2. 향상된 이미지 생성 로직 (무한 재시도 지원)
+# ------------------------------------------------------------------
+
+def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
+    """선택된 엔진으로 이미지 생성 시도 (무한 재시도 지원)"""
+    enhanced_prompt = f"{prompt}, cinematic, high quality, detailed, professional"
+    
+    if provider == "Pollinations Turbo (초고속) ⚡":
+        endpoints = [
+            {
+                'name': 'Pollinations-Turbo',
+                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&model=turbo&seed={random.randint(0,999999)}"
+            }
+        ]
+    elif provider == "Pollinations Flux (고품질)":
+        endpoints = [
+            {
+                'name': 'Pollinations-Flux',
+                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&model=flux&seed={random.randint(0,999999)}"
+            }
+        ]
+    elif provider == "Hugging Face Schnell (빠름)":
+        endpoints = [
+            {
+                'name': 'HF-Schnell',
+                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
+            }
+        ]
+    else:
+        endpoints = [
+            {
+                'name': provider,
+                'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
+            }
+        ]
+    
+    fallback_endpoints = [
+        {
+            'name': 'Pollinations-Alt',
+            'url': f"https://pollinations.ai/p/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}"
+        }
+    ]
+    
+    all_endpoints = endpoints + fallback_endpoints
+    
+    attempt = 0
+    while attempt < max_retries:
+        for endpoint in all_endpoints:
+            try:
+                response = requests.get(endpoint['url'], timeout=60)
+                
+                if response.status_code == 200 and len(response.content) > 1000:
+                    img = Image.open(BytesIO(response.content))
+                    if img.size[0] > 100 and img.size[1] > 100:
+                        return img, endpoint['name']
+            except Exception as e:
+                continue
+        
+        attempt += 1
+        if attempt < max_retries:
+            time.sleep(1)
+    
+    return None, None
+
 # ------------------------------------------------------------------
 # 메인 실행 로직
 # ------------------------------------------------------------------
@@ -807,7 +1003,6 @@ if submit_btn and execution_mode == "API 자동 실행":
         st.session_state['prompts_generated'] = False
         st.session_state['turntables_generated'] = False
         
-        # 스토리 옵션 수집
         story_opts = {
             'use_arc': use_arc,
             'use_trial': use_trial,
@@ -819,7 +1014,6 @@ if submit_btn and execution_mode == "API 자동 실행":
             'use_twist': use_twist
         }
         
-        # 1. 기획안 생성
         plan_container = st.empty()
         with plan_container.container():
             st.markdown("<div class='status-box'>📝 AI가 기획안과 프롬프트를 작성하고 있습니다...</div>", unsafe_allow_html=True)
@@ -833,13 +1027,11 @@ if submit_btn and execution_mode == "API 자동 실행":
             plan = st.session_state['plan_data']
             st.session_state['prompts_generated'] = True
             
-            # 기획안 표시
             with plan_container.container():
                 st.markdown("<div class='status-box'>✅ 기획안 및 프롬프트 생성 완료!</div>", unsafe_allow_html=True)
                 st.subheader(f"🎥 {plan['project_title']}")
                 st.info(plan['logline'])
                 
-                # YouTube 메타데이터 미리보기
                 if 'youtube' in plan:
                     with st.expander("📺 YouTube 메타데이터 미리보기", expanded=True):
                         st.markdown(f"**제목:** {plan['youtube']['title']}")
@@ -853,7 +1045,6 @@ if submit_btn and execution_mode == "API 자동 실행":
                     st.markdown(f"**비주얼 스타일:** {plan['visual_style']['description']}")
                     st.code(plan['visual_style']['character_prompt'], language="text")
                 
-                # 턴테이블 프롬프트
                 if 'turntable' in plan:
                     st.markdown("---")
                     st.markdown("### 🎭 턴테이블 레퍼런스 프롬프트")
@@ -878,7 +1069,6 @@ if submit_btn and execution_mode == "API 자동 실행":
                             with st.expander(f"📦 {obj['name']}", expanded=False):
                                 st.code(obj['prompt'], language="text")
                 
-                # 씬 프롬프트
                 st.markdown("---")
                 st.markdown("### 📝 씬 프롬프트 미리보기")
                 
@@ -896,11 +1086,9 @@ if submit_btn and execution_mode == "API 자동 실행":
                             st.markdown("**영상 프롬프트:**")
                             st.code(scene['video_prompt'], language="text")
             
-            # 2. 자동 이미지 생성
             if auto_generate:
                 st.markdown("---")
                 
-                # 턴테이블 자동 생성
                 if 'turntable' in plan:
                     st.markdown("### 🎭 턴테이블 이미지 자동 생성")
                     
@@ -949,7 +1137,6 @@ if submit_btn and execution_mode == "API 자동 실행":
                         st.markdown("<div class='status-box'>✅ 턴테이블 생성 완료!</div>", unsafe_allow_html=True)
                         time.sleep(1)
                 
-                # 씬 이미지 자동 생성
                 st.markdown("### 🎨 씬 이미지 자동 생성")
                 total_scenes = len(plan['scenes'])
                 
@@ -1043,11 +1230,69 @@ if execution_mode == "수동 모드 (무제한)":
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# 4. 결과 표시
+# 4. 결과 표시 및 프롬프트만 저장
 # ------------------------------------------------------------------
 
 if st.session_state['plan_data']:
     plan = st.session_state['plan_data']
+    
+    st.markdown("---")
+    
+    # 프롬프트만 저장 버튼 (이미지 생성 전에도 가능)
+    st.markdown("### 💾 프롬프트 & 설정 저장 (이미지 없이)")
+    st.caption("⚡ 이미지 생성이 끝나지 않아도 모든 프롬프트와 설정을 저장할 수 있습니다!")
+    
+    col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+    
+    with col_p1:
+        html_prompt = create_html_export(plan)
+        st.download_button(
+            label="📄 HTML",
+            data=html_prompt,
+            file_name=f"{plan['project_title']}_prompts.html",
+            mime="text/html",
+            use_container_width=True
+        )
+    
+    with col_p2:
+        json_prompt = create_json_export(plan)
+        st.download_button(
+            label="📋 JSON",
+            data=json_prompt,
+            file_name=f"{plan['project_title']}_prompts.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col_p3:
+        txt_prompt = create_text_export(plan)
+        st.download_button(
+            label="📝 TXT",
+            data=txt_prompt,
+            file_name=f"{plan['project_title']}_prompts.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    with col_p4:
+        md_prompt = create_markdown_export(plan)
+        st.download_button(
+            label="📑 MD",
+            data=md_prompt,
+            file_name=f"{plan['project_title']}_prompts.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
+    
+    with col_p5:
+        csv_prompt = create_csv_export(plan)
+        st.download_button(
+            label="📊 CSV",
+            data=csv_prompt,
+            file_name=f"{plan['project_title']}_scenes.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
     
     st.markdown("---")
     
@@ -1079,44 +1324,40 @@ if st.session_state['plan_data']:
     
     st.markdown("---")
     
-    # 저장 버튼들
-    st.markdown("### 💾 프로젝트 저장")
-    col_save1, col_save2, col_save3 = st.columns(3)
-    
-    with col_save1:
-        # HTML 저장
-        html_content = create_html_export(plan, st.session_state['generated_images'], st.session_state['turntable_images'])
-        st.download_button(
-            label="📄 HTML 다운로드",
-            data=html_content,
-            file_name=f"{plan['project_title']}_project.html",
-            mime="text/html",
-            use_container_width=True
-        )
-    
-    with col_save2:
-        # JSON 저장
-        json_content = create_json_export(plan)
-        st.download_button(
-            label="📋 JSON 다운로드",
-            data=json_content,
-            file_name=f"{plan['project_title']}_project.json",
-            mime="application/json",
-            use_container_width=True
-        )
-    
-    with col_save3:
-        # TXT 저장
-        txt_content = create_text_export(plan)
-        st.download_button(
-            label="📝 TXT 다운로드",
-            data=txt_content,
-            file_name=f"{plan['project_title']}_project.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
-    
-    st.markdown("---")
+    # 이미지가 있을 경우 전체 프로젝트 저장
+    if st.session_state['generated_images'] or st.session_state['turntable_images']:
+        st.markdown("### 💾 전체 프로젝트 저장 (이미지 포함)")
+        col_save1, col_save2, col_save3 = st.columns(3)
+        
+        with col_save1:
+            html_full = create_html_export(plan, st.session_state['generated_images'], st.session_state['turntable_images'])
+            st.download_button(
+                label="📄 HTML (이미지 포함)",
+                data=html_full,
+                file_name=f"{plan['project_title']}_full.html",
+                mime="text/html",
+                use_container_width=True
+            )
+        
+        with col_save2:
+            st.download_button(
+                label="📋 JSON",
+                data=json_prompt,
+                file_name=f"{plan['project_title']}_full.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        
+        with col_save3:
+            st.download_button(
+                label="📝 TXT",
+                data=txt_prompt,
+                file_name=f"{plan['project_title']}_full.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        
+        st.markdown("---")
     
     # 턴테이블 섹션
     if 'turntable' in plan:

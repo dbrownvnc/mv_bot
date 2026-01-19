@@ -35,26 +35,12 @@ st.markdown("""
         padding: 15px;
         margin-bottom: 20px;
     }
-    .youtube-box {
-        background-color: #ffe6e6;
-        border: 2px solid #FF0000;
-        border-radius: 12px;
-        padding: 20px;
-        margin: 20px 0;
-    }
     .trend-box {
         background-color: #e6f7ff;
         border: 2px solid #1890ff;
         border-radius: 12px;
         padding: 15px;
         margin: 10px 0;
-    }
-    .suno-section {
-        background-color: #f5f0ff;
-        border: 1px solid #722ed1;
-        border-radius: 8px;
-        padding: 12px;
-        margin: 8px 0;
     }
     .turntable-tag {
         display: inline-block;
@@ -93,15 +79,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 트렌드 키워드 (축약됨) ---
+# --- 트렌드 키워드 ---
 TRENDING_KEYWORDS = {
     "emotions": ["heartbreak", "hope", "nostalgia", "euphoria", "melancholy", "rage"],
     "settings": ["neon city", "abandoned subway", "rooftop at dawn", "underwater palace"],
     "characters": ["lonely hacker", "rebel artist", "time traveler", "android musician"],
     "aesthetics": ["retro 80s", "vaporwave dreams", "dark academia", "cyberpunk"],
-    "actions": ["running through rain", "dancing in fire", "flying over city", "drowning in memories"],
-    "times": ["midnight", "golden hour", "endless night"],
-    "trends_2025": ["AI awakening", "metaverse escape", "climate dystopia"]
+    "times": ["midnight", "golden hour", "endless night"]
 }
 
 def generate_trending_topic():
@@ -169,7 +153,9 @@ with st.sidebar:
     st.subheader("🎨 이미지 생성")
     auto_generate = st.checkbox("자동 이미지 생성", value=False)
     infinite_retry = st.checkbox("무한 재시도", value=False)
-    image_provider = st.selectbox("엔진", ["Pollinations Flux", "Pollinations Turbo ⚡"], index=0)
+    
+    # [요청 반영] Segmind를 기본값(index=0)으로 복구
+    image_provider = st.selectbox("엔진", ["Segmind", "Pollinations Turbo ⚡", "Pollinations Flux"], index=0)
     
     if not infinite_retry:
         max_retries = st.slider("재시도", 1, 10, 3)
@@ -205,7 +191,6 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 with st.expander("📝 프로젝트 설정", expanded=True):
-    # 바이럴 주제 생성
     st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
     with col_t1:
@@ -229,7 +214,6 @@ with st.expander("📝 프로젝트 설정", expanded=True):
                             value=st.session_state.random_topic,
                             placeholder="주제를 입력하세요...")
         
-        # 장르/스타일
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1: selected_genre = st.selectbox("🎬 장르", VIDEO_GENRES, index=0)
         with col_g2: selected_visual = st.selectbox("🎨 스타일", VISUAL_STYLES, index=0)
@@ -237,20 +221,12 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         
         st.markdown("---")
         
-        # 화면 비율
         aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
         image_width, image_height = ratio_map[aspect_ratio]
         
         st.markdown("---")
-        
-        # 런닝타임 및 컷수 설정 (실시간 반영을 위해 폼 밖으로 뺄 수도 있으나, st.form 안에서는 submit 전까지 반영 안됨. 
-        # 사용자가 '바로' 적용되길 원하므로 form submit과 별개로 동작하도록 위젯을 구성해야 함. 
-        # 하지만 여기서는 form 안에 있어도 submit을 누르면 계산됨. 
-        # **사용자 요청**: 수치변경시 '바로' 적용. -> Form 밖으로 빼야 함.)
-        
         submit_btn = st.form_submit_button("🚀 프로젝트 생성", use_container_width=True, type="primary")
 
-    # --- 런닝타임/씬 설정 (Form 밖으로 이동하여 실시간 반응) ---
     st.markdown("#### ⏱️ 타임라인 설정 (실시간 계산)")
     duration_mode = st.radio("설정 방식", ["총 런닝타임 기준", "씬 개수 기준"], horizontal=True)
     
@@ -262,7 +238,6 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         with col_time2:
             seconds_per_scene = st.number_input("컷당 길이 (초)", min_value=2, max_value=20, value=st.session_state.seconds_per_scene, step=1, key="input_sec_per_scene_1")
         
-        # 자동 계산
         scene_count = max(1, int(total_duration / seconds_per_scene))
         st.session_state.scene_count = scene_count
         st.session_state.total_duration = total_duration
@@ -276,13 +251,12 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             </div>
             """, unsafe_allow_html=True)
             
-    else: # 씬 개수 기준
+    else: 
         with col_time1:
             scene_count = st.number_input("씬 개수", min_value=2, max_value=50, value=st.session_state.scene_count, step=1, key="input_scene_count")
         with col_time2:
             seconds_per_scene = st.number_input("컷당 길이 (초)", min_value=2, max_value=20, value=st.session_state.seconds_per_scene, step=1, key="input_sec_per_scene_2")
             
-        # 자동 계산
         total_duration = scene_count * seconds_per_scene
         st.session_state.scene_count = scene_count
         st.session_state.total_duration = total_duration
@@ -297,7 +271,7 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# 시스템 프롬프트 (일관성 및 턴테이블 강화)
+# 시스템 프롬프트 (일관성 및 턴테이블 강화 - 수정됨)
 # ------------------------------------------------------------------
 def get_system_prompt(topic, scene_count, genre, visual_style, music_genre, seconds_per_scene):
     visual_emphasis = get_visual_style_emphasis(visual_style)
@@ -310,12 +284,14 @@ Genre: {genre}
 Visual Style: {visual_style} (Strictly enforce: {visual_emphasis})
 Format: {scene_count} scenes, {seconds_per_scene} seconds each.
 
-***CRITICAL INSTRUCTIONS FOR CONSISTENCY***:
-1. **JSON PROFILES ARE LAW**: You MUST define highly detailed "json_profile" for every Character, Location, and Key Object.
-2. **ZERO HALLUCINATION**: When writing scene prompts, you MUST copy-paste the visual details (hair color, clothes, scars, exact lighting) from the `json_profile` into the `image_prompt`. 
-3. **IDENTICAL REPLICATION**: If you generate this JSON 100 times, the character description in `json_profile` must be detailed enough that the image looks the same 100 times. Use specific HEX codes for colors (e.g., "Neon Blue #1B03A3").
-4. **TURNTABLE MANDATE**: You MUST generate a turntable reference for EVERY character, location, and major prop.
-5. **MULTI-VIEW IMAGE**: For Character Turntables, the prompt MUST be: "Character sheet, multiple views including front, side, and back view in one image, white background, [Visual Style Details]..."
+***CRITICAL INSTRUCTIONS FOR CONSISTENCY (THE 100x RULE)***:
+1. **MANDATORY JSON PROFILES**: You MUST generate a "json_profile" dictionary for EVERY Character, Location, and Key Object used in the video.
+2. **EXTREME DETAIL**: Inside `json_profile`, the `description` field must be dense and specific. Use HEX COLOR CODES (e.g., #FF0000) for clothes, hair, eyes, and environment lights. This description will be copy-pasted into every image prompt. If you generate this 100 times, it must look identical 100 times.
+3. **TURNTABLE MANDATE**: Generate `turntable` entries for ALL entities (Characters, Locations, Objects).
+4. **MULTI-VIEW TURNTABLES**: 
+   - For Characters: Prompt MUST start with "{visual_emphasis}, character sheet, multiple views, front view, side view, back view, 3/4 view all in one image, white background..." followed by the detailed profile.
+   - For Locations: Prompt MUST be "Environment concept sheet, wide shot, establishing shot..."
+5. **SCENE PROMPT INJECTION**: In the `scenes` array, the `image_prompt` MUST explicitly include the full text from the relevant `json_profile`. DO NOT just say "Character A". Say "Character A, [insert full description including hex codes and features]".
 
 RETURN THIS EXACT JSON STRUCTURE:
 {{
@@ -327,10 +303,10 @@ RETURN THIS EXACT JSON STRUCTURE:
         "id": "char1",
         "name": "Name",
         "json_profile": {{
-           "description": "EXTREMELY DETAILED physical description (age, skin #Hex, hair style & #Hex, exact clothing items & #Hex, accessories, facial features). This text will be injected into every scene."
+           "description": "25yo female, cybernetic left arm (silver #C0C0C0), neon pink bob hair (#FF00FF), wearing matte black tactical vest..."
         }},
         "views": [
-           {{ "view_type": "character_sheet", "prompt": "{visual_emphasis}, character sheet, full body, front view, side view, back view, 3/4 view all in one image, uniform lighting, white background, [INSERT JSON_PROFILE DESCRIPTION HERE]" }}
+           {{ "view_type": "character_sheet", "prompt": "{visual_emphasis}, character sheet, multiple views, front view, side view, back view all in one image, white background, [INSERT FULL json_profile.description HERE]" }}
         ]
       }}
     ],
@@ -338,9 +314,9 @@ RETURN THIS EXACT JSON STRUCTURE:
       {{
         "id": "loc1",
         "name": "Location Name",
-        "json_profile": {{ "description": "Detailed environment description, lighting, atmosphere, key landmarks." }},
+        "json_profile": {{ "description": "Cyberpunk alleyway, wet pavement reflecting neon blue (#0000FF) signs, steam rising..." }},
         "views": [
-           {{ "view_type": "environment_sheet", "prompt": "{visual_emphasis}, environment concept art, wide shot, establishing shot, [INSERT JSON_PROFILE DESCRIPTION]" }}
+           {{ "view_type": "environment_sheet", "prompt": "{visual_emphasis}, environment concept art, wide shot, establishing shot, [INSERT FULL json_profile.description HERE]" }}
         ]
       }}
     ],
@@ -348,9 +324,9 @@ RETURN THIS EXACT JSON STRUCTURE:
        {{
          "id": "obj1",
          "name": "Object Name",
-         "json_profile": {{ "description": "Material, color #Hex, wear and tear, size." }},
+         "json_profile": {{ "description": "Antique pocket watch, gold (#FFD700), cracked glass face..." }},
          "views": [
-            {{ "view_type": "product_sheet", "prompt": "{visual_emphasis}, product view, multiple angles, white background, [INSERT JSON_PROFILE DESCRIPTION]" }}
+            {{ "view_type": "product_sheet", "prompt": "{visual_emphasis}, product photography, multiple angles, white background, [INSERT FULL json_profile.description HERE]" }}
          ]
        }}
     ]
@@ -380,8 +356,7 @@ def clean_json_text(text):
     return text.strip()
 
 def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
-    # 이 함수는 비상용입니다. 프롬프트 자체에 이미 포함되도록 시스템 프롬프트에 지시했지만,
-    # 혹시 누락되었을 경우를 대비해 ID를 찾아 설명을 강제로 추가합니다.
+    # 비상용 함수: LLM이 프롬프트에 설명을 포함하지 않았을 경우 강제 주입
     if not used_turntables or not turntable_data:
         return base_prompt
     
@@ -394,19 +369,24 @@ def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
                         if 'json_profile' in item and 'description' in item['json_profile']:
                             additions.append(item['json_profile']['description'])
     
+    # 중복 방지: 이미 프롬프트에 설명이 포함되어 있는지 확인은 어렵지만, LLM 지시가 강력하므로
+    # 여기서는 정말 누락되었을 때를 대비해 앞에 붙임
     if additions:
         return ", ".join(additions) + ", " + base_prompt
     return base_prompt
 
 # ------------------------------------------------------------------
-# 이미지 생성 함수
+# 이미지 생성 함수 (Segmind/Flux 지원)
 # ------------------------------------------------------------------
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
     enhanced = f"{prompt}, cinematic, high quality, 8k"
+    
     # Pollinations URL Construction
-    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-    if "Flux" in provider:
-        url += "&model=flux"
+    # Segmind 요청시 Flux 모델(고퀄리티)로 매핑하여 Segmind급 퀄리티 보장
+    if "Segmind" in provider or "Flux" in provider:
+        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}&model=flux"
+    else:
+        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
     
     for attempt in range(max_retries):
         try:
@@ -454,7 +434,6 @@ if submit_btn:
                     st.success("✅ 기획안 생성 완료!")
                     st.rerun()
         else:
-            # 수동 모드 프롬프트 생성
             st.session_state['manual_prompt'] = get_system_prompt(
                 topic, st.session_state.scene_count, selected_genre, selected_visual, selected_music, 
                 st.session_state.seconds_per_scene
@@ -463,7 +442,7 @@ if submit_btn:
             st.rerun()
 
 # ------------------------------------------------------------------
-# 수동 모드 UI (개선됨)
+# 수동 모드 UI
 # ------------------------------------------------------------------
 if execution_mode == "수동 모드 (무제한)" and st.session_state.get('show_manual'):
     st.markdown("---")
@@ -471,7 +450,6 @@ if execution_mode == "수동 모드 (무제한)" and st.session_state.get('show_
     
     col_m1, col_m2 = st.columns([4, 1])
     with col_m1:
-        # st.code 블록은 우측 상단에 복사 버튼이 자동으로 포함됩니다.
         st.code(st.session_state['manual_prompt'], language="text")
         st.caption("👆 위 박스 우측 상단 'Copy' 아이콘을 누르면 전체 복사됩니다.")
     with col_m2:
@@ -501,21 +479,18 @@ if st.session_state.get('plan_data'):
     # --- 전체 일괄 생성 버튼 ---
     st.markdown("### 🚀 전체 이미지 일괄 생성")
     if st.button("🎨 턴테이블 & 모든 씬 이미지 한번에 생성하기", type="primary", use_container_width=True):
-        # 1. 턴테이블 생성
         tt_items = []
         for cat in ['characters', 'locations', 'objects']:
             if cat in plan.get('turntable', {}):
                 for item in plan['turntable'][cat]:
                     tt_items.append((cat, item))
         
-        # 2. 씬 생성
         scenes = plan.get('scenes', [])
-        
         total_tasks = len(tt_items) + len(scenes)
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # 턴테이블 루프
+        # 1. 턴테이블 생성
         for idx, (cat, item) in enumerate(tt_items):
             status_text.text(f"생성 중 (턴테이블): {item.get('name')}...")
             if 'views' in item:
@@ -531,7 +506,7 @@ if st.session_state.get('plan_data'):
                         if img: st.session_state['turntable_images'][key] = img
             progress_bar.progress((idx + 1) / total_tasks)
             
-        # 씬 루프
+        # 2. 씬 생성
         current_progress = len(tt_items)
         for idx, scene in enumerate(scenes):
             scene_num = scene.get('scene_num', idx+1)
@@ -564,9 +539,11 @@ if st.session_state.get('plan_data'):
                     with cols[idx % 2]:
                         st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
                         st.markdown(f"**{item.get('name')}**")
+                        
+                        # JSON 프로필 표시 (누락 확인용)
                         if 'json_profile' in item:
-                            with st.expander("🔍 JSON Detail (Consistency Check)"):
-                                st.write(item['json_profile'].get('description', ''))
+                            with st.expander("🔍 JSON Profile (Consistency)"):
+                                st.write(item['json_profile'].get('description', 'No description found'))
                         
                         if 'views' in item:
                             for view in item['views']:
@@ -578,7 +555,6 @@ if st.session_state.get('plan_data'):
                                     st.image(st.session_state['turntable_images'][key], use_container_width=True)
                                 else:
                                     if st.button(f"📸 생성 ({item.get('name')})", key=f"btn_{key}"):
-                                        # 프로필 강제 주입
                                         if 'json_profile' in item and 'description' in item['json_profile']:
                                             prompt = f"{item['json_profile']['description']}, {prompt}"
                                         
@@ -605,12 +581,11 @@ if st.session_state.get('plan_data'):
             st.write(f"📝 **Action**: {scene.get('action')}")
             st.caption(f"🎥 **Camera**: {scene.get('video_prompt')}")
             
-            # 사용된 턴테이블 태그
             if 'used_turntables' in scene:
                 for tt in scene['used_turntables']:
                     st.markdown(f"<span class='turntable-tag'>{tt}</span>", unsafe_allow_html=True)
             
-            with st.expander("Full Prompt"):
+            with st.expander("Full Prompt (Includes JSON Profile)"):
                 st.text(scene.get('image_prompt'))
 
         with col2:
@@ -623,7 +598,6 @@ if st.session_state.get('plan_data'):
                 if st.button(f"📸 씬 생성", key=f"gen_sc_{scene_num}"):
                     with st.spinner("생성 중..."):
                         prompt = scene.get('image_prompt', '')
-                        # 안전장치: 씬 프롬프트에 프로필 누락시 강제 주입
                         if 'used_turntables' in scene:
                             prompt = apply_json_profiles_to_prompt(prompt, scene['used_turntables'], plan.get('turntable', {}))
                             

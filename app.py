@@ -310,6 +310,46 @@ def clean_json_text(text):
     text = re.sub(r',\s*}', '}', text)
     text = re.sub(r',\s*]', ']', text)
     text = re.sub(r'//.*?\n', '\n', text)
+    
+    # JSON 문자열 내의 제어 문자 이스케이프 처리
+    def escape_control_chars_in_strings(json_str):
+        result = []
+        in_string = False
+        escape_next = False
+        
+        for char in json_str:
+            if escape_next:
+                result.append(char)
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                result.append(char)
+                escape_next = True
+                continue
+            
+            if char == '"':
+                in_string = not in_string
+                result.append(char)
+                continue
+            
+            if in_string:
+                if char == '\n':
+                    result.append('\\n')
+                elif char == '\r':
+                    result.append('\\r')
+                elif char == '\t':
+                    result.append('\\t')
+                elif ord(char) < 32:  # 기타 제어 문자
+                    result.append(f'\\u{ord(char):04x}')
+                else:
+                    result.append(char)
+            else:
+                result.append(char)
+        
+        return ''.join(result)
+    
+    text = escape_control_chars_in_strings(text)
     return text
 
 def get_visual_style_emphasis(visual_style):

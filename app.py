@@ -132,17 +132,13 @@ TRENDING_KEYWORDS = {
 }
 
 def generate_trending_topic():
-    """유튜브 트렌드 기반 랜덤 주제 생성"""
     templates = [
         "{character} experiencing {emotion} in a {setting} during {time}, {aesthetic} style, {action}",
         "{emotion} journey of a {character} in {setting}, {aesthetic} vibes, {trend}",
         "{action} through a {setting} at {time}, feeling {emotion}, {aesthetic} aesthetic",
-        "{character} {action} in a {aesthetic} {setting}, exploring themes of {emotion} and {trend}",
-        "A story of {emotion} and {trend}, featuring a {character} in a {setting} during {time}"
     ]
     
     template = random.choice(templates)
-    
     topic = template.format(
         emotion=random.choice(TRENDING_KEYWORDS["emotions"]),
         setting=random.choice(TRENDING_KEYWORDS["settings"]),
@@ -152,28 +148,13 @@ def generate_trending_topic():
         time=random.choice(TRENDING_KEYWORDS["times"]),
         trend=random.choice(TRENDING_KEYWORDS["trends_2025"])
     )
-    
     return topic
 
 def get_viral_topic_with_ai(api_key, model_name):
-    """AI를 사용하여 바이럴 주제 생성"""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
-        
-        prompt = """Generate ONE highly viral, trendy music video concept for 2025 YouTube.
-
-Requirements:
-- Emotionally compelling and visually striking
-- Incorporates current trends: AI, nostalgia, mental health, climate, Gen-Z culture
-- Cinematic and shareable
-- 1-2 sentences maximum
-
-Format: Just the concept, no explanation.
-
-Example: "A lonely AI artist painting holographic memories in an abandoned metaverse gallery at midnight, searching for the last human connection before the digital apocalypse"
-"""
-        
+        prompt = """Generate ONE viral music video concept for 2025 YouTube (1-2 sentences)."""
         response = model.generate_content(prompt)
         return response.text.strip().strip('"')
     except:
@@ -208,7 +189,7 @@ MUSIC_GENRES = [
     "Ambient", "Synthwave", "Phonk", "Drill", "Afrobeat"
 ]
 
-# --- 사이드바 (설정) ---
+# --- 사이드바 ---
 with st.sidebar:
     st.header("⚙️ 설정")
     
@@ -230,46 +211,28 @@ with st.sidebar:
         else:
             gemini_key = st.text_input("Gemini API Key", type="password")
             
-        st.caption("사용 모델")
         model_options = [
             "gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", 
-            "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest"
+            "gemini-1.5-pro", "gemini-1.0-pro"
         ]
         gemini_model = st.selectbox("모델 선택", model_options, index=0, label_visibility="collapsed")
     
     st.markdown("---")
-    
     st.subheader("🎨 이미지 생성 설정")
     
-    auto_generate = st.checkbox("프로젝트 생성시 자동 이미지 생성", value=True)
-    infinite_retry = st.checkbox("생성 실패시 무한 재시도", value=False)
+    auto_generate = st.checkbox("자동 이미지 생성", value=True)
+    infinite_retry = st.checkbox("무한 재시도", value=False)
     
     image_provider = st.selectbox(
-        "이미지 생성 엔진",
-        [
-            "Segmind (안정)",
-            "Pollinations Turbo (초고속) ⚡",
-            "Pollinations Flux (고품질)",
-            "Hugging Face Schnell (빠름)",
-            "Image.AI (무제한)",
-        ],
+        "이미지 엔진",
+        ["Segmind (안정)", "Pollinations Turbo ⚡", "Pollinations Flux"],
         index=0
     )
     
-    engine_info = {
-        "Pollinations Turbo (초고속) ⚡": "✨ 1-2초 생성, 무료, 무제한",
-        "Pollinations Flux (고품질)": "✨ 고품질, 3-5초, 무료",
-        "Hugging Face Schnell (빠름)": "✨ 빠른 생성, 무료",
-        "Image.AI (무제한)": "✨ 완전 무제한",
-        "Segmind (안정)": "✨ 안정적 (기본 추천)"
-    }
-    st.caption(engine_info[image_provider])
-    
     if not infinite_retry:
-        max_retries = st.slider("생성 실패시 재시도 횟수", 1, 10, 3)
+        max_retries = st.slider("재시도 횟수", 1, 10, 3)
     else:
         max_retries = 999
-        st.caption("⚠️ 무한 재시도 활성화")
 
     if st.button("🗑️ 초기화"):
         st.session_state.clear()
@@ -279,156 +242,92 @@ with st.sidebar:
 st.title("🎬 AI MV Director")
 
 ratio_map = {
-    "1:1 (Square)": (1024, 1024),
     "16:9 (Cinema)": (1024, 576),
     "9:16 (Portrait)": (576, 1024),
-    "4:3 (Classic)": (1024, 768),
-    "3:2 (Photo)": (1024, 683),
-    "21:9 (Ultra Wide)": (1024, 439)
+    "1:1 (Square)": (1024, 1024),
 }
 
 if 'scene_count' not in st.session_state:
     st.session_state.scene_count = 8
-if 'total_duration' not in st.session_state:
-    st.session_state.total_duration = 60
-if 'seconds_per_scene' not in st.session_state:
-    st.session_state.seconds_per_scene = 5
 if 'random_topic' not in st.session_state:
     st.session_state.random_topic = ""
+if 'plan_data' not in st.session_state:
+    st.session_state['plan_data'] = None
+if 'generated_images' not in st.session_state:
+    st.session_state['generated_images'] = {}
+if 'turntable_images' not in st.session_state:
+    st.session_state['turntable_images'] = {}
 
-with st.expander("📝 프로젝트 설정 (터치하여 열기)", expanded=True):
+with st.expander("📝 프로젝트 설정", expanded=True):
     st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
     st.markdown("### 🔥 바이럴 주제 생성기")
     
-    col_trend1, col_trend2 = st.columns(2)
-    
-    with col_trend1:
-        if st.button("🎲 랜덤 트렌드 주제 생성", use_container_width=True):
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        if st.button("🎲 랜덤 주제", use_container_width=True):
             st.session_state.random_topic = generate_trending_topic()
-            st.toast("🔥 트렌디한 주제 생성 완료!")
             st.rerun()
-    
-    with col_trend2:
-        if st.button("🤖 AI 바이럴 주제 생성", use_container_width=True):
-            if gemini_key and gemini_model:
-                with st.spinner("AI가 바이럴 주제를 생성 중..."):
-                    st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
-                    st.toast("🤖 AI 바이럴 주제 생성 완료!")
-                    st.rerun()
+    with col_t2:
+        if st.button("🤖 AI 주제", use_container_width=True):
+            if gemini_key:
+                st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
+                st.rerun()
             else:
-                st.warning("API 키를 먼저 입력해주세요!")
+                st.warning("API 키 필요")
     
     if st.session_state.random_topic:
-        st.info(f"💡 생성된 주제: {st.session_state.random_topic}")
-    
+        st.info(f"💡 {st.session_state.random_topic}")
     st.markdown("</div>", unsafe_allow_html=True)
     
     with st.form("project_form"):
         topic = st.text_area(
-            "영상 주제를 입력하세요", 
+            "영상 주제", 
             height=100, 
-            value=st.session_state.random_topic if st.session_state.random_topic else "",
-            placeholder="예: 2050년 사이버펑크 서울, 비 오는 밤, 고독한 형사"
+            value=st.session_state.random_topic,
+            placeholder="주제 입력 또는 위 버튼으로 생성"
         )
         
         st.markdown("---")
-        use_json_profiles = st.checkbox(
-            "🎯 JSON 프로필 사용 (일관성 극대화)", 
-            value=True,
-            help="턴테이블의 상세 JSON 프로필을 모든 씬에 자동 적용"
-        )
-        if use_json_profiles:
-            st.caption("✅ 디테일한 프로필이 생성되고 각 씬에 자동 적용됩니다")
-        
+        use_json_profiles = st.checkbox("🎯 JSON 프로필 사용", value=True)
         st.markdown("---")
         
-        col_genre1, col_genre2, col_genre3 = st.columns(3)
-        
-        with col_genre1:
-            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0)
-        
-        with col_genre2:
-            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0)
-        
-        with col_genre3:
-            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0)
+        col_g1, col_g2, col_g3 = st.columns(3)
+        with col_g1:
+            selected_genre = st.selectbox("🎬 장르", VIDEO_GENRES, index=0)
+        with col_g2:
+            selected_visual = st.selectbox("🎨 스타일", VISUAL_STYLES, index=0)
+        with col_g3:
+            selected_music = st.selectbox("🎵 음악", MUSIC_GENRES, index=0)
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            aspect_ratio = st.selectbox(
-                "🎞️ 이미지 비율",
-                [
-                    "16:9 (Cinema)",
-                    "9:16 (Portrait)",
-                    "1:1 (Square)",
-                    "4:3 (Classic)",
-                    "3:2 (Photo)",
-                    "21:9 (Ultra Wide)"
-                ],
-                index=0
-            )
-            
+            aspect_ratio = st.selectbox("🎞️ 비율", ["16:9 (Cinema)", "9:16 (Portrait)", "1:1 (Square)"], index=0)
             image_width, image_height = ratio_map[aspect_ratio]
-            st.caption(f"해상도: {image_width}x{image_height}")
-        
         with col2:
-            duration_mode = st.radio(
-                "⏱️ 런닝타임 설정",
-                ["총 런닝타임", "씬 개수"],
-                horizontal=True
-            )
+            scene_count = st.number_input("씬 개수", min_value=2, max_value=30, value=st.session_state.scene_count, step=1)
         
-        duration_container = st.container()
-        
-        with duration_container:
-            if duration_mode == "총 런닝타임":
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=300, value=st.session_state.total_duration, step=10, key="total_dur")
-                with col_d2:
-                    seconds_per_scene = st.slider("컷당 길이 (초)", 3, 15, st.session_state.seconds_per_scene, key="sec_per_scene")
-                
-                scene_count = max(1, int(total_duration / seconds_per_scene))
-                st.caption(f"→ 총 **{scene_count}개** 씬 생성")
-                
-                st.session_state.scene_count = scene_count
-                st.session_state.total_duration = total_duration
-                st.session_state.seconds_per_scene = seconds_per_scene
-            else:
-                scene_count = st.number_input("생성할 씬 개수", min_value=2, max_value=30, value=st.session_state.scene_count, step=1, key="scene_cnt")
-                st.caption(f"총 **{scene_count}개** 씬")
-                
-                st.session_state.scene_count = scene_count
-        
-        st.markdown("**📖 스토리 구성**")
-        story_options = st.columns(4)
-        
-        with story_options[0]:
+        st.markdown("**📖 스토리**")
+        cols = st.columns(4)
+        with cols[0]:
             use_arc = st.checkbox("기승전결", value=True)
             use_sensory = st.checkbox("감각적", value=True)
-        
-        with story_options[1]:
-            use_trial = st.checkbox("시련/갈등", value=False)
+        with cols[1]:
+            use_trial = st.checkbox("시련", value=False)
             use_dynamic = st.checkbox("역동적", value=True)
-        
-        with story_options[2]:
-            use_emotional = st.checkbox("감정 변화", value=True)
+        with cols[2]:
+            use_emotional = st.checkbox("감정변화", value=True)
             use_climax = st.checkbox("클라이맥스", value=True)
-        
-        with story_options[3]:
-            use_symbolic = st.checkbox("상징적", value=False)
+        with cols[3]:
+            use_symbolic = st.checkbox("상징", value=False)
             use_twist = st.checkbox("반전", value=False)
         
         submit_btn = st.form_submit_button("🚀 프로젝트 시작")
 
 # ------------------------------------------------------------------
-# 공통 함수 - 강화된 JSON 정제
+# 공통 함수
 # ------------------------------------------------------------------
 
 def clean_json_text(text):
-    """강화된 JSON 정제 함수"""
-    # 1. 코드 블록 제거
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         text = match.group(1)
@@ -437,306 +336,161 @@ def clean_json_text(text):
         if match:
             text = match.group(1)
     
-    # 2. 줄바꿈과 공백 정리
     text = text.strip()
-    
-    # 3. 잘못된 쉼표 수정 (객체/배열 끝의 쉼표)
     text = re.sub(r',\s*}', '}', text)
     text = re.sub(r',\s*]', ']', text)
-    
-    # 4. 주석 제거
     text = re.sub(r'//.*?\n', '\n', text)
-    
-    # 5. 싱글 쿼트를 더블 쿼트로
-    # text = text.replace("'", '"')  # 조심스럽게 사용
     
     return text
 
-def fix_json_syntax(text):
-    """JSON 문법 자동 수정 시도"""
-    try:
-        # 기본 정제
-        cleaned = clean_json_text(text)
-        
-        # 파싱 시도
-        return json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        # 에러 위치 찾기
-        lines = cleaned.split('\n')
-        error_line = e.lineno - 1 if e.lineno else 0
-        
-        # 간단한 수정 시도
-        if error_line < len(lines):
-            # 해당 라인에 쉼표 추가 시도
-            if not lines[error_line].strip().endswith(',') and not lines[error_line].strip().endswith('{') and not lines[error_line].strip().endswith('['):
-                lines[error_line] = lines[error_line].rstrip() + ','
-                fixed_text = '\n'.join(lines)
-                try:
-                    return json.loads(fixed_text)
-                except:
-                    pass
-        
-        raise e
-
 def get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json_profiles):
     story_elements = []
-    if options.get('use_arc'): story_elements.append("classic story arc")
-    if options.get('use_trial'): story_elements.append("conflict and trials")
-    if options.get('use_sensory'): story_elements.append("sensory descriptions")
-    if options.get('use_dynamic'): story_elements.append("dynamic movement")
-    if options.get('use_emotional'): story_elements.append("emotional progression")
-    if options.get('use_climax'): story_elements.append("climactic moment")
-    if options.get('use_symbolic'): story_elements.append("symbolic imagery")
-    if options.get('use_twist'): story_elements.append("plot twist")
+    if options.get('use_arc'): story_elements.append("story arc")
+    if options.get('use_sensory'): story_elements.append("sensory")
+    if options.get('use_dynamic'): story_elements.append("dynamic")
+    if options.get('use_emotional'): story_elements.append("emotional")
+    if options.get('use_climax'): story_elements.append("climax")
     
-    story_instruction = ", ".join(story_elements) if story_elements else "cinematic storytelling"
+    story_instruction = ", ".join(story_elements) if story_elements else "cinematic"
     
-    json_profile_instruction = ""
+    json_note = ""
     if use_json_profiles:
-        json_profile_instruction = """
-
-CRITICAL: Include detailed json_profile for characters/locations/objects.
-- Characters: age, height, skin, eyes, hair (color/length/style), clothing, accessories, distinctive features
-- Locations: architecture, color_palette, lighting, weather, atmosphere
-- Objects: dimensions, material, colors, design
-Keep descriptions concise but specific (avoid overly long nested structures).
-"""
+        json_note = "\nInclude json_profile for characters/locations with: age, hair, eyes, skin, clothing for characters; lighting, atmosphere for locations."
     
-    return f"""You are a Music Video Director. Create a production plan in VALID JSON format ONLY.
+    return f"""Create a {scene_count}-scene music video plan in VALID JSON.
 
 Theme: "{topic}"
 Genre: {genre}, Visual: {visual_style}, Music: {music_genre}
-Story: {story_instruction}
-{json_profile_instruction}
+Story: {story_instruction}{json_note}
 
-CRITICAL JSON RULES:
-- Use ONLY double quotes for strings
-- NO trailing commas before }} or ]]
-- NO comments (//)
-- Ensure all brackets match
-- Keep json_profile structures simple
+JSON Rules:
+- Double quotes only
+- NO trailing commas
+- NO comments
 
-Return ONLY this JSON structure:
+Structure:
 {{
   "project_title": "Title (Korean)",
   "logline": "Concept (Korean)",
   "youtube": {{
-    "title": "English title ending with | AI Generated",
-    "description": "200-300 words SEO description",
-    "hashtags": "keyword, separated, by, commas"
+    "title": "Title | AI Generated",
+    "description": "SEO description 200 words",
+    "hashtags": "keyword, separated, commas"
   }},
   "music": {{
-    "style": "Genre and mood (Korean)",
-    "suno_prompt": "Suno AI prompt with [Verse], [Chorus], [Bridge], BPM, key",
+    "style": "Style (Korean)",
+    "suno_prompt": "[Verse] ... [Chorus] ... 120 BPM",
     "tags": "[genre], [mood]"
   }},
   "visual_style": {{
-    "description": "{visual_style} style (Korean)",
-    "character_prompt": "Main character in {visual_style}",
-    "style_tags": "{visual_style}, {genre}"
+    "description": "{visual_style} (Korean)",
+    "character_prompt": "Main character",
+    "style_tags": "{visual_style}"
   }},
   "turntable": {{
-    "characters": [
-      {{
-        "id": "main_char",
-        "name": "Name (Korean)",
-        "json_profile": {{"age": "25", "hair": "silver long", "eyes": "cyan"}},
-        "prompt": "360 character turnaround, {visual_style}"
-      }}
-    ],
-    "backgrounds": [
-      {{
-        "id": "main_location",
-        "name": "Name (Korean)",
-        "json_profile": {{"lighting": "neon night", "atmosphere": "rainy"}},
-        "prompt": "360 environment, {visual_style}"
-      }}
-    ],
+    "characters": [{{"id": "char1", "name": "Name", "json_profile": {{"age": "25", "hair": "black"}}, "prompt": "360 view"}}],
+    "backgrounds": [{{"id": "bg1", "name": "Name", "json_profile": {{"lighting": "neon"}}, "prompt": "360 location"}}],
     "objects": []
   }},
   "scenes": [
-    {{
-      "scene_num": 1,
-      "timecode": "00:00-00:05",
-      "action": "Scene (Korean)",
-      "camera": "Shot (Korean)",
-      "used_turntables": ["main_char", "main_location"],
-      "image_prompt": "Scene action",
-      "video_prompt": "Camera movement"
-    }}
+    {{"scene_num": 1, "timecode": "00:00-00:05", "action": "Action (Korean)", "camera": "Shot (Korean)", "used_turntables": ["char1", "bg1"], "image_prompt": "Scene", "video_prompt": "Movement"}}
   ]
-}}
-
-Generate {scene_count} scenes. Ensure VALID JSON syntax."""
+}}"""
 
 def apply_json_profiles_to_prompt(base_prompt, used_turntables, turntable_data):
-    """JSON 프로필을 프롬프트에 자동 적용"""
     if not used_turntables or not turntable_data:
         return base_prompt
     
     profile_parts = []
-    
     for tt_ref in used_turntables:
         for category in ['characters', 'backgrounds', 'objects']:
             if category in turntable_data:
                 for item in turntable_data[category]:
-                    if item.get('id') == tt_ref or f"{category[:-1]}_{item.get('name')}" == tt_ref:
+                    if item.get('id') == tt_ref:
                         if 'json_profile' in item:
-                            profile_text = json_to_detailed_text(item['json_profile'], item.get('name', ''))
-                            profile_parts.append(profile_text)
+                            profile = item['json_profile']
+                            if isinstance(profile, dict):
+                                parts = [f"{k}: {v}" for k, v in profile.items()]
+                                profile_parts.append(", ".join(parts))
                         break
     
     if profile_parts:
-        combined = ", ".join(profile_parts) + ", " + base_prompt
-        return combined
-    
+        return ", ".join(profile_parts) + ", " + base_prompt
     return base_prompt
 
-def json_to_detailed_text(json_profile, name=""):
-    """JSON 프로필을 상세 텍스트로 변환"""
-    parts = []
-    
-    if isinstance(json_profile, dict):
-        # 캐릭터
-        if 'age' in json_profile:
-            parts.append(f"{json_profile.get('age', '')} year old")
-        if 'height' in json_profile:
-            parts.append(f"{json_profile.get('height', '')} tall")
-        if 'skin' in json_profile:
-            parts.append(f"{json_profile['skin']} skin")
-        
-        # 얼굴/머리
-        if 'eyes' in json_profile:
-            parts.append(f"{json_profile['eyes']} eyes")
-        if 'hair' in json_profile:
-            parts.append(f"{json_profile['hair']} hair")
-        
-        # 의상
-        if 'clothing' in json_profile:
-            parts.append(f"wearing {json_profile['clothing']}")
-        
-        # 장소
-        if 'lighting' in json_profile:
-            parts.append(f"{json_profile['lighting']} lighting")
-        if 'atmosphere' in json_profile:
-            parts.append(json_profile['atmosphere'])
-        
-        # 오브젝트
-        if 'material' in json_profile:
-            parts.append(f"{json_profile['material']} material")
-    
-    return ", ".join([p for p in parts if p])
-
-# 나머지 저장 함수들은 이전과 동일 (생략)
 def create_json_export(plan_data):
     return json.dumps(plan_data, ensure_ascii=False, indent=2)
 
 # ------------------------------------------------------------------
-# API 실행 로직 - 강화된 에러 핸들링
+# API 실행
 # ------------------------------------------------------------------
 
 def generate_with_fallback(prompt, api_key, start_model):
     genai.configure(api_key=api_key)
-    fallback_chain = [start_model, "gemini-1.5-flash", "gemini-2.0-flash-lite-preview-02-05", "gemini-1.0-pro"]
+    models = [start_model, "gemini-1.5-flash", "gemini-1.0-pro"]
     
-    for model_name in fallback_chain:
+    for model_name in models:
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            time.sleep(1) 
-            return response.text, model_name 
-        except Exception as e:
+            time.sleep(1)
+            return response.text, model_name
+        except:
             time.sleep(0.5)
-            continue
-    
     raise Exception("All models failed")
 
-def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json_profiles):
-    """강화된 JSON 파싱 with 재시도"""
-    max_attempts = 3
-    
-    for attempt in range(max_attempts):
+def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json):
+    for attempt in range(3):
         try:
-            prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json_profiles)
+            prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
             
-            # 강화된 JSON 파싱
-            try:
-                plan_data = fix_json_syntax(response_text)
-                st.toast(f"✅ 기획 생성 완료 (Model: {used_model}, Attempt: {attempt+1})")
-                return plan_data
-            except json.JSONDecodeError as e:
-                if attempt < max_attempts - 1:
-                    st.warning(f"JSON 파싱 실패 (시도 {attempt+1}/{max_attempts}). 재시도 중...")
-                    time.sleep(2)
-                    continue
-                else:
-                    # 마지막 시도에서 실패시 에러 상세 표시
-                    st.error(f"JSON 파싱 실패: {str(e)}")
-                    with st.expander("❌ 생성된 응답 보기 (디버깅용)"):
-                        st.code(response_text, language="text")
-                    raise
-                    
-        except Exception as e:
-            if attempt < max_attempts - 1:
-                st.warning(f"생성 실패 (시도 {attempt+1}/{max_attempts}). 재시도 중...")
+            cleaned = clean_json_text(response_text)
+            plan_data = json.loads(cleaned)
+            st.toast(f"✅ 생성 완료 ({used_model})")
+            return plan_data
+        except json.JSONDecodeError as e:
+            if attempt < 2:
+                st.warning(f"재시도 중... ({attempt+1}/3)")
                 time.sleep(2)
             else:
-                st.error(f"기획안 생성 실패: {e}")
+                st.error(f"JSON 파싱 실패: {str(e)}")
+                with st.expander("생성된 응답"):
+                    st.code(response_text)
                 return None
-    
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)
+            else:
+                st.error(f"생성 실패: {e}")
+                return None
     return None
 
-# 이미지 생성 함수는 동일
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    enhanced_prompt = f"{prompt}, cinematic, high quality, detailed, professional"
+    enhanced = f"{prompt}, cinematic, high quality"
+    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
     
-    endpoints = [{
-        'name': provider,
-        'url': f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced_prompt)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-    }]
-    
-    attempt = 0
-    while attempt < max_retries:
-        for endpoint in endpoints:
-            try:
-                response = requests.get(endpoint['url'], timeout=60)
-                if response.status_code == 200 and len(response.content) > 1000:
-                    img = Image.open(BytesIO(response.content))
-                    if img.size[0] > 100 and img.size[1] > 100:
-                        return img, endpoint['name']
-            except:
-                continue
-        attempt += 1
-        if attempt < max_retries:
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200 and len(response.content) > 1000:
+                img = Image.open(BytesIO(response.content))
+                if img.size[0] > 100:
+                    return img, provider
+        except:
+            pass
+        if attempt < max_retries - 1:
             time.sleep(1)
-    
     return None, None
 
 # ------------------------------------------------------------------
-# 세션 스테이트 초기화
+# 메인 실행 로직
 # ------------------------------------------------------------------
 
-if 'plan_data' not in st.session_state:
-    st.session_state['plan_data'] = None
-if 'generated_images' not in st.session_state:
-    st.session_state['generated_images'] = {}
-if 'turntable_images' not in st.session_state:
-    st.session_state['turntable_images'] = {}
-if 'use_json_profiles' not in st.session_state:
-    st.session_state['use_json_profiles'] = True
-
-# ------------------------------------------------------------------
-# 메인 실행
-# ------------------------------------------------------------------
-
-if submit_btn and execution_mode == "API 자동 실행":
-    if not gemini_key or not topic:
-        st.warning("API Key와 주제를 입력해주세요.")
+if submit_btn:
+    if not topic:
+        st.warning("주제를 입력해주세요")
     else:
-        st.session_state.clear()
-        st.session_state['use_json_profiles'] = use_json_profiles
-        
         story_opts = {
             'use_arc': use_arc, 'use_trial': use_trial,
             'use_sensory': use_sensory, 'use_dynamic': use_dynamic,
@@ -744,59 +498,234 @@ if submit_btn and execution_mode == "API 자동 실행":
             'use_symbolic': use_symbolic, 'use_twist': use_twist
         }
         
-        with st.spinner("📝 AI가 기획안을 작성하고 있습니다..."):
-            st.session_state['plan_data'] = generate_plan_auto(
-                topic, gemini_key, gemini_model, scene_count, story_opts,
+        if execution_mode == "API 자동 실행":
+            if not gemini_key:
+                st.warning("API Key 필요")
+            else:
+                st.session_state.clear()
+                st.session_state['use_json_profiles'] = use_json_profiles
+                
+                with st.spinner("📝 기획안 생성 중..."):
+                    st.session_state['plan_data'] = generate_plan_auto(
+                        topic, gemini_key, gemini_model, scene_count, story_opts,
+                        selected_genre, selected_visual, selected_music, use_json_profiles
+                    )
+                
+                if st.session_state['plan_data']:
+                    st.success("✅ 생성 완료!")
+                    st.rerun()
+        
+        else:  # 수동 모드
+            st.session_state['manual_prompt'] = get_system_prompt(
+                topic, scene_count, story_opts, 
                 selected_genre, selected_visual, selected_music, use_json_profiles
             )
-        
-        if st.session_state['plan_data']:
-            st.success("✅ 기획안 생성 완료!")
+            st.session_state['use_json_profiles'] = use_json_profiles
+            st.session_state['image_width'] = image_width
+            st.session_state['image_height'] = image_height
             st.rerun()
 
-# 결과 표시 (plan_data가 있을 때)
+# ------------------------------------------------------------------
+# 수동 모드 UI
+# ------------------------------------------------------------------
+
+if execution_mode == "수동 모드 (무제한)" and 'manual_prompt' in st.session_state:
+    st.markdown("---")
+    st.markdown("<div class='manual-box'>", unsafe_allow_html=True)
+    st.markdown("### 📋 수동 모드")
+    
+    st.markdown("**1️⃣ 프롬프트 복사**")
+    st.code(st.session_state['manual_prompt'], language="text")
+    
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.link_button("🚀 Gemini 열기", "https://gemini.google.com/", use_container_width=True)
+    
+    st.markdown("**2️⃣ 결과 붙여넣기**")
+    manual_input = st.text_area("JSON 결과", height=200, placeholder='```json\n{\n  "project_title": "...",\n  ...\n}\n```')
+    
+    if st.button("✅ 결과 적용", use_container_width=True):
+        if not manual_input.strip():
+            st.warning("결과를 붙여넣어주세요")
+        else:
+            try:
+                cleaned = clean_json_text(manual_input)
+                st.session_state['plan_data'] = json.loads(cleaned)
+                st.session_state['generated_images'] = {}
+                st.session_state['turntable_images'] = {}
+                st.success("✅ 로드 완료!")
+                st.rerun()
+            except json.JSONDecodeError as e:
+                st.error(f"JSON 파싱 실패: {str(e)}")
+                with st.expander("입력된 텍스트"):
+                    st.code(manual_input)
+            except Exception as e:
+                st.error(f"오류: {e}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------
+# 결과 표시
+# ------------------------------------------------------------------
+
 if st.session_state.get('plan_data'):
     plan = st.session_state['plan_data']
+    use_json = st.session_state.get('use_json_profiles', True)
+    img_width = st.session_state.get('image_width', 1024)
+    img_height = st.session_state.get('image_height', 576)
     
     st.markdown("---")
-    st.markdown("### 💾 프로젝트 저장")
     
-    col1, col2 = st.columns(2)
-    with col1:
+    # 저장
+    st.markdown("### 💾 저장")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
         st.download_button(
             "📋 JSON 다운로드",
             data=create_json_export(plan),
             file_name=f"{plan.get('project_title', 'project')}.json",
-            mime="application/json"
+            mime="application/json",
+            use_container_width=True
         )
     
     st.markdown("---")
     
-    # YouTube 정보
+    # YouTube
     if 'youtube' in plan:
-        st.markdown("## 📺 YouTube 메타데이터")
-        st.text_input("제목", value=plan['youtube'].get('title', ''), key="yt_t")
-        st.text_area("설명", value=plan['youtube'].get('description', ''), key="yt_d", height=150)
-        st.text_input("해시태그", value=plan['youtube'].get('hashtags', ''), key="yt_h")
+        st.markdown("## 📺 YouTube")
+        st.text_input("제목", value=plan['youtube'].get('title', ''), key="yt_title")
+        st.text_area("설명", value=plan['youtube'].get('description', ''), height=150, key="yt_desc")
+        st.text_input("태그", value=plan['youtube'].get('hashtags', ''), key="yt_tags")
+    
+    st.markdown("---")
+    
+    # 음악
+    if 'music' in plan:
+        st.markdown("### 🎵 음악")
+        with st.expander("Suno 프롬프트"):
+            st.code(plan['music'].get('suno_prompt', ''))
     
     st.markdown("---")
     
     # 턴테이블
     if 'turntable' in plan:
         st.markdown("### 🎭 턴테이블")
+        
+        all_tt = []
         for cat in ['characters', 'backgrounds', 'objects']:
             if cat in plan['turntable']:
                 for item in plan['turntable'][cat]:
-                    with st.expander(f"{item.get('name', 'N/A')}"):
-                        if 'json_profile' in item:
+                    all_tt.append((cat, item))
+        
+        if all_tt:
+            if st.button("🔄 모든 턴테이블 재생성"):
+                st.session_state['turntable_images'] = {}
+                st.rerun()
+            
+            for cat, item in all_tt:
+                tt_key = f"{cat}_{item.get('name', '')}"
+                
+                with st.container():
+                    st.markdown(f"<div class='turntable-box'>", unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        icon = "👤" if cat == "characters" else "🏙️" if cat == "backgrounds" else "📦"
+                        st.markdown(f"**{icon} {item.get('name', 'N/A')}** (ID: {item.get('id', 'N/A')})")
+                    with col2:
+                        if tt_key in st.session_state['turntable_images']:
+                            if st.button("🔄", key=f"regen_tt_{tt_key}"):
+                                del st.session_state['turntable_images'][tt_key]
+                                st.rerun()
+                    
+                    if 'json_profile' in item:
+                        with st.expander("📊 JSON 프로필"):
                             st.json(item['json_profile'])
+                    
+                    if tt_key in st.session_state['turntable_images']:
+                        st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
+                    else:
+                        if st.button(f"📸 생성", key=f"gen_tt_{tt_key}"):
+                            with st.spinner("생성 중..."):
+                                final_prompt = item.get('prompt', '')
+                                if use_json and 'json_profile' in item:
+                                    profile = item['json_profile']
+                                    if isinstance(profile, dict):
+                                        parts = [f"{k}: {v}" for k, v in profile.items()]
+                                        final_prompt = ", ".join(parts) + ", " + final_prompt
+                                
+                                img, provider = try_generate_image_with_fallback(
+                                    final_prompt, 1024, 1024, image_provider, max_retries
+                                )
+                                
+                                if img:
+                                    st.session_state['turntable_images'][tt_key] = img
+                                    st.success("✅ 생성 완료")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 생성 실패")
+                    
+                    with st.expander("프롬프트"):
                         st.code(item.get('prompt', ''))
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("---")
     
     # 씬
-    st.markdown("### 🎬 씬")
+    st.markdown("### 🎬 스토리보드")
+    
+    if st.button("🔄 모든 씬 재생성"):
+        st.session_state['generated_images'] = {}
+        st.rerun()
+    
     for scene in plan.get('scenes', []):
-        with st.expander(f"Scene {scene.get('scene_num', '?')}"):
+        scene_num = scene.get('scene_num', 0)
+        
+        with st.container():
+            st.markdown(f"<div class='scene-box'>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**Scene {scene_num}** - {scene.get('timecode', '')}")
+                if 'used_turntables' in scene and scene['used_turntables']:
+                    for tt in scene['used_turntables']:
+                        st.markdown(f"<span class='turntable-tag'>🎭 {tt}</span>", unsafe_allow_html=True)
+            with col2:
+                if scene_num in st.session_state['generated_images']:
+                    if st.button("🔄", key=f"regen_s_{scene_num}"):
+                        del st.session_state['generated_images'][scene_num]
+                        st.rerun()
+            
+            if scene_num in st.session_state['generated_images']:
+                st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+            else:
+                if st.button(f"📸 촬영", key=f"gen_s_{scene_num}"):
+                    with st.spinner("생성 중..."):
+                        base = scene.get('image_prompt', '')
+                        
+                        if use_json and 'used_turntables' in scene:
+                            final = apply_json_profiles_to_prompt(
+                                base, scene['used_turntables'], plan.get('turntable', {})
+                            )
+                        else:
+                            final = f"{plan.get('visual_style', {}).get('character_prompt', '')}, {base}"
+                        
+                        img, provider = try_generate_image_with_fallback(
+                            final, img_width, img_height, image_provider, max_retries
+                        )
+                        
+                        if img:
+                            st.session_state['generated_images'][scene_num] = img
+                            st.success("✅ 생성 완료")
+                            st.rerun()
+                        else:
+                            st.error("❌ 생성 실패")
+            
             st.write(f"**액션:** {scene.get('action', '')}")
-            if 'used_turntables' in scene:
-                st.write(f"**턴테이블:** {', '.join(scene['used_turntables'])}")
-            st.code(scene.get('image_prompt', ''))
+            st.write(f"**카메라:** {scene.get('camera', '')}")
+            
+            with st.expander("프롬프트"):
+                st.code(scene.get('image_prompt', ''))
+            
+            st.markdown("</div>", unsafe_allow_html=True)

@@ -1524,12 +1524,20 @@ if submit_btn:
             )
             st.session_state['show_manual'] = True
 
-# 수동 모드 표시
+# 수동 모드 표시 (수정됨)
 if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
     st.markdown("---")
-    st.subheader("📋 수동 모드 - AI 프롬프트")
-    st.text_area("아래 프롬프트를 복사하여 ChatGPT, Claude, Gemini 등에 붙여넣으세요:", 
-                value=st.session_state['manual_prompt'], height=400)
+    st.markdown("### 📋 수동 모드 - AI 프롬프트")
+    
+    # 버튼 및 안내 행
+    col_guide, col_gemini = st.columns([6, 1])
+    with col_guide:
+        st.caption("👇 아래 프롬프트의 우측 상단 '복사(📄)' 아이콘을 클릭하여 AI에게 전달하세요.")
+    with col_gemini:
+        st.link_button("🚀 Gemini 열기", "https://gemini.google.com/app", use_container_width=True)
+    
+    # 복사 버튼이 포함된 코드 블록으로 표시 (기존 text_area 대체)
+    st.code(st.session_state['manual_prompt'], language="text")
     
     st.markdown("### 📥 결과 붙여넣기")
     manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")

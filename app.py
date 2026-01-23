@@ -533,7 +533,7 @@ def clean_json_text(text):
     return text
 
 # ------------------------------------------------------------------
-# 시스템 프롬프트 (전문가 수준)
+# 시스템 프롬프트 (전문가 수준 - 수정됨)
 # ------------------------------------------------------------------
 def get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
     story_elements = []
@@ -567,16 +567,7 @@ COLOR SCIENCE:
 - Color palette: Specify exact HEX codes for dominant, secondary, accent colors
 - LUT reference: Reference specific color grades (Teal & Orange, Film Noir, Kodak Vision3)
 - Contrast ratio: Specify shadow/highlight relationship
-
-COMPOSITION:
-- Rule of thirds, golden ratio, leading lines, frame within frame
-- Negative space usage
-- Symmetry vs asymmetry choices
-
-EDITING RHYTHM:
-- Cut timing synced to musical beats (cut on 1, 2&, etc.)
-- Transition types: Hard cut, dissolve, whip pan, match cut, L-cut, J-cut
-- Pacing: Slow-motion percentage, speed ramping"""
+"""
 
     # 실사 강조
     photorealistic_extra = ""
@@ -596,179 +587,59 @@ AVOID: plastic skin, uncanny valley, overly smooth, CGI appearance, digital art 
     if use_json:
         json_detail = f"""
 
-ULTRA-DETAILED JSON PROFILES (MANDATORY):
+ULTRA-DETAILED JSON PROFILES (MANDATORY CONSISTENCY RULE):
 
-For CHARACTERS - Include ALL of these:
+1. **SOURCE OF TRUTH**: The 'json_profile' field defines the absolute visual truth. 
+2. **CONSISTENCY**: When generating the 'scenes' later, you MUST NOT contradict these profiles. 
+3. **MANDATORY**: You MUST generate a turntable entry for **EVERY** significant character, location, prop, and vehicle that appears in the video. Do not leave any key element undefined.
+4. **DETAIL**: Provide specific HEX codes, materials, and exact measurements.
+
+For CHARACTERS:
 {{
-  "physical": {{
-    "age": "exact age",
-    "height_cm": number,
-    "weight_kg": number,
-    "body_type": "detailed description",
-    "skin_tone": "#HEX code",
-    "skin_texture": "description with imperfections for realism"
-  }},
-  "face": {{
-    "shape": "oval/round/square/heart/diamond",
-    "eyes": {{"color": "#HEX", "shape": "description", "size": "description", "special": "catchlights, expression"}},
-    "eyebrows": {{"color": "#HEX", "shape": "arched/straight/thick/thin", "grooming": "natural/shaped"}},
-    "nose": "detailed description",
-    "lips": {{"color": "#HEX", "shape": "full/thin/cupid bow", "texture": "smooth/chapped"}},
-    "jawline": "soft/defined/angular",
-    "skin_details": "freckles, moles, scars, wrinkles if any"
-  }},
-  "hair": {{
-    "color_primary": "#HEX",
-    "color_secondary": "#HEX for highlights/lowlights",
-    "length_cm": number,
-    "style": "detailed style description",
-    "texture": "straight/wavy/curly/coily",
-    "condition": "healthy/damaged/styled"
-  }},
-  "clothing": {{
-    "top": {{"type": "item", "color": "#HEX", "material": "fabric", "brand_style": "reference", "fit": "tight/loose/tailored", "details": "buttons/zippers/patterns"}},
-    "bottom": {{"type": "item", "color": "#HEX", "material": "fabric", "fit": "description"}},
-    "shoes": {{"type": "item", "color": "#HEX", "style": "description"}},
-    "outerwear": {{"type": "item", "color": "#HEX", "material": "fabric"}}
-  }},
-  "accessories": ["item1 with exact description", "item2 with size and material"],
-  "distinctive_features": ["feature1 with exact location and size", "feature2"],
-  "posture": "standing/sitting description",
-  "expression": "emotional state shown through face and body"
+  "physical": {{ "age": "exact age", "height_cm": number, "body_type": "detailed", "skin_tone": "#HEX", "skin_texture": "pores/freckles/scars" }},
+  "face": {{ "shape": "...", "eyes": {{"color": "#HEX", "shape": "..."}}, "nose": "...", "lips": "...", "hair": {{"color": "#HEX", "style": "..."}} }},
+  "clothing": {{ "top": {{"color": "#HEX", "material": "..."}}, "bottom": "...", "shoes": "...", "accessories": "..." }},
+  "expression": "default emotional state"
 }}
 
-For LOCATIONS/BACKGROUNDS:
+For LOCATIONS:
 {{
-  "location_type": "specific place description",
-  "architecture": {{"style": "description", "materials": ["material1", "material2"], "condition": "new/weathered/ruined"}},
-  "lighting": {{
-    "time": "HH:MM",
-    "source": "natural/artificial/mixed",
-    "color_temperature": "2700K-6500K",
-    "key_color": "#HEX",
-    "fill_color": "#HEX",
-    "shadow_intensity": "soft/medium/hard",
-    "special_effects": "volumetric fog, god rays, etc."
-  }},
-  "weather": {{"condition": "clear/cloudy/rainy/foggy", "visibility_m": number, "precipitation": "none/light/heavy", "humidity_percent": number}},
-  "color_palette": {{"dominant": "#HEX", "secondary": "#HEX", "accent": "#HEX"}},
-  "atmosphere": "mood description",
-  "props": ["prop1 with position", "prop2 with details"]
-}}
-
-For OBJECTS/PROPS:
-{{
-  "name": "object name",
-  "dimensions": {{"length_cm": number, "width_cm": number, "height_cm": number}},
-  "weight_kg": number,
-  "material": "primary material",
-  "color": "#HEX",
-  "finish": "matte/glossy/metallic percentage",
-  "condition": "new/used/damaged",
-  "significance": "narrative importance"
-}}
-
-For VEHICLES:
-{{
-  "make": "brand",
-  "model": "specific model",
-  "year": number,
-  "color": "#HEX",
-  "condition": "showroom/used/weathered",
-  "modifications": ["mod1", "mod2"],
-  "interior": "description"
+  "location_type": "exact place",
+  "architecture": "style and materials",
+  "lighting": {{"time": "HH:MM", "source": "sun/neon", "color_temp": "K"}},
+  "palette": {{"dominant": "#HEX", "accent": "#HEX"}}
 }}
 """
 
     turntable_instruction = """
 
-TURNTABLE REFERENCE SHEETS (CRITICAL FOR CONSISTENCY):
+TURNTABLE REFERENCE SHEETS (COMPREHENSIVE & MANDATORY):
 
-Create COMPREHENSIVE turntable sheets for EACH element:
+You MUST create turntable entries for ALL distinct elements. If there are 3 different characters, create 3 character turntables. If there are 2 locations, create 2 location turntables.
 
-CHARACTER TURNTABLES - Generate these views:
-1. "character turntable sheet, white/gray studio background, multiple views in one image":
-   - Full body front view (T-pose or A-pose)
-   - Full body side view (90° profile)
-   - Full body back view
-   - Full body 3/4 view
+FOR EACH CHARACTER:
+- View 1: "full_turntable" (Front, Side, Back, 3/4 in one wide image)
+- View 2: "face_detail" (Extreme close-up, pore details, eyes)
+- View 3: "expression_sheet" (Neutral, Joy, Anger, Sorrow, Surprise)
+- View 4: "fashion_detail" (Clothing texture, shoes, accessories)
+- View 5: "cinematic_portrait" (Best lighting, shallow depth of field)
 
-2. "character detail sheet, white background, close-up details":
-   - Face close-up (front)
-   - Face profile (side)
-   - Hands detail
-   - Feet/shoes detail
-   - Signature accessory detail
+FOR EACH LOCATION:
+- View 1: "establishing_shot" (Wide angle, entire scale)
+- View 2: "lighting_study" (Same angle, Day vs Night vs Golden Hour)
+- View 3: "texture_details" (Wall materials, floor, key props)
 
-3. "expression sheet, white background, same character multiple expressions":
-   - Neutral
-   - Happy/Smiling
-   - Sad/Melancholy
-   - Angry/Intense
-   - Surprised
-
-LOCATION TURNTABLES:
-1. "environment concept art, panoramic view, establishing shot"
-2. "location detail sheet, key areas and props"
-3. "lighting variation sheet, same location, different times of day"
-
-PROP/OBJECT TURNTABLES:
-1. "product photography style, white background, multiple angles"
-2. "object in context, showing scale and usage"
-
-VEHICLE TURNTABLES:
-1. "automotive photography, studio lighting, front 3/4, rear 3/4, side profile"
-2. "interior detail shots"
-
-COSTUME TURNTABLES:
-1. "fashion flat lay, clothing items arranged"
-2. "costume on mannequin, front and back"
+FOR OBJECTS/VEHICLES:
+- View 1: "studio_product_shot" (Clean background, 3 angles)
+- View 2: "in_situ" (Object in the scene environment)
 """
 
-    suno_instruction = """
-
-SUNO AI PROMPT - STRUCTURED FORMAT (SEPARATE EACH SECTION CLEARLY):
-
-The music prompt should be structured with clear sections that can be copied separately:
-
-Section 1 - STYLE_TAGS:
-Genre: [specific subgenre]
-Mood: [emotional descriptor]
-BPM: [exact number 60-180]
-Key: [musical key like "E minor" or "C major"]
-Influences: [2-3 artist references]
-
-Section 2 - VOCAL_DIRECTION:
-Voice_Type: [Male/Female/Duet/Choir/Instrumental]
-Vocal_Style: [Powerful/Soft/Raspy/Ethereal/Whispered/Belted]
-Vocal_Effects: [Reverb level, delay, harmonies, autotune if any]
-Language: [Korean/English/Mix]
-
-Section 3 - INSTRUMENTATION:
-Primary_Instruments: [Main instrument 1, Main instrument 2]
-Secondary_Instruments: [Supporting instruments]
-Percussion: [Drum kit type, electronic/acoustic, additional percussion]
-Bass: [Bass type and style]
-Synths: [If applicable, synth types]
-
-Section 4 - PRODUCTION:
-Mix_Style: [Lo-fi/Clean/Heavy/Minimal]
-Spatial: [Intimate/Wide/Arena]
-Era_Reference: [80s/90s/Modern/Futuristic]
-Special_Effects: [Vinyl crackle, glitch, risers, drops]
-
-Section 5 - SONG_STRUCTURE:
-[Intro] - (description, 4-8 bars)
-[Verse 1] - Lyrics line 1 / Lyrics line 2 / Lyrics line 3 / Lyrics line 4
-[Pre-Chorus] - (building) Lyrics line 1 / Lyrics line 2
-[Chorus] - (full energy) Hook line 1 / Hook line 2 / Hook line 3 / Hook line 4
-[Verse 2] - Development line 1 / line 2 / line 3 / line 4
-[Bridge] - (breakdown or build) Bridge lyrics
-[Final Chorus] - (explosive, ad-libs) Extended hook
-[Outro] - (fade/hard stop) Closing statement
-
-Section 6 - LYRICS_FULL:
-Complete lyrics with Korean and English if bilingual
+    video_prompt_instruction = """
+VIDEO PROMPT UPGRADE (CRITICAL):
+The 'video_prompt' field must be highly detailed for AI Video Generators (Runway Gen-2, Pika, Kling).
+Format: "[Camera Movement] + [Subject Action] + [Physics/Environment] + [Technical Specs]"
+Example: "Slow dolly zoom in on character's eye, tear rolling down cheek, hair blowing gently in wind, rain falling in background, volumetric lighting, 8k resolution, high fidelity, 120fps smooth motion, shallow depth of field."
+NEVER use simple phrases like "Man walking". Be specific about speed, weight, lighting changes, and atmosphere.
 """
 
     return f"""You are an ELITE music video director working at the highest industry standards.
@@ -780,7 +651,7 @@ Theme: "{topic}"
 Genre: {genre}
 Visual Style: {visual_style}
 Music Genre: {music_genre}
-Duration: {scene_count} scenes × {seconds_per_scene} seconds = {scene_count * seconds_per_scene} seconds total
+Duration: {scene_count} scenes × {seconds_per_scene} seconds
 Story Elements: {story_instruction}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -790,13 +661,13 @@ ALL image prompts MUST begin with: "{visual_emphasis}"
 {expert_instruction}
 {json_detail}
 {turntable_instruction}
-{suno_instruction}
+{video_prompt_instruction}
 
 JSON FORMAT RULES:
 - Use double quotes ONLY
 - NO trailing commas
 - NO comments
-- Escape special characters properly
+- Escape special characters
 
 RETURN THIS EXACT JSON STRUCTURE:
 {{
@@ -804,74 +675,60 @@ RETURN THIS EXACT JSON STRUCTURE:
   "project_title_en": "Title in English",
   "logline": "One-sentence concept in Korean",
   "logline_en": "One-sentence concept in English",
-  "director_vision": "2-3 sentences about artistic vision and approach",
-  "target_audience": "Demographic and psychographic description",
-  "mood_board_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "director_vision": "2-3 sentences about artistic vision",
   
   "youtube": {{
-    "title": "Viral-optimized title with | separator and keywords",
-    "description": "SEO-optimized 200-300 word description with timestamps",
-    "hashtags": "tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, tag9, tag10",
-    "thumbnail_concept": "Description of ideal thumbnail composition"
+    "title": "Viral title",
+    "description": "SEO description",
+    "hashtags": "tags..."
   }},
   
   "music": {{
-    "style": "Detailed style description in Korean",
-    "style_en": "Detailed style description in English",
-    "style_tags": "genre, mood, bpm, key, influences",
-    "vocal_direction": "voice type, style, effects, language",
-    "instrumentation": "primary, secondary, percussion, bass, synths",
-    "production": "mix style, spatial, era, effects",
-    "song_structure": "Full structure with section markers",
-    "lyrics_full": "Complete lyrics",
-    "suno_prompt_combined": "All sections combined for Suno"
-  }},
-  
-  "color_script": {{
-    "overall_palette": {{"dominant": "#HEX", "secondary": "#HEX", "accent": "#HEX"}},
-    "act1_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}},
-    "act2_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}},
-    "act3_colors": {{"mood": "description", "palette": ["#HEX", "#HEX"]}}
+    "style": "Korean description",
+    "style_tags": "genre, mood, bpm",
+    "vocal_direction": "details...",
+    "instrumentation": "details...",
+    "song_structure": "intro-verse-chorus...",
+    "lyrics_full": "lyrics...",
+    "suno_prompt_combined": "full prompt..."
   }},
   
   "turntable": {{
     "characters": [
       {{
         "id": "char1",
-        "name": "Character Name (Korean)",
-        "name_en": "Character Name (English)",
-        "role": "protagonist/antagonist/supporting",
-        "json_profile": {{complete character profile as specified above}},
+        "name": "Name",
+        "name_en": "Name English",
+        "json_profile": {{ ...FULL PHYSICAL/CLOTHING PROFILE... }},
         "views": [
-          {{"view_type": "full_turntable", "prompt": "{visual_emphasis}, character turntable sheet, white studio background, full body, front view, side view, back view, 3/4 view, T-pose, character design reference sheet, multiple angles in one image"}},
-          {{"view_type": "face_detail", "prompt": "{visual_emphasis}, character face detail sheet, white background, front face close-up, side profile, various expressions"}},
-          {{"view_type": "costume_detail", "prompt": "{visual_emphasis}, costume detail sheet, white background, clothing details, fabric textures, accessories close-up"}},
-          {{"view_type": "action_poses", "prompt": "{visual_emphasis}, character action pose sheet, white background, dynamic poses, movement reference"}}
+            {{ "view_type": "full_turntable", "prompt": "..." }},
+            {{ "view_type": "face_detail", "prompt": "..." }},
+            {{ "view_type": "expression_sheet", "prompt": "..." }},
+            {{ "view_type": "fashion_detail", "prompt": "..." }},
+            {{ "view_type": "cinematic_portrait", "prompt": "..." }}
         ]
       }}
+      // GENERATE OBJECTS FOR ALL CHARACTERS
     ],
     "locations": [
       {{
         "id": "loc1",
-        "name": "Location Name (Korean)",
-        "name_en": "Location Name (English)",
-        "json_profile": {{complete location profile}},
+        "name": "Name",
+        "json_profile": {{ ...FULL LOCATION PROFILE... }},
         "views": [
-          {{"view_type": "establishing", "prompt": "{visual_emphasis}, establishing shot, wide angle, full environment"}},
-          {{"view_type": "detail_areas", "prompt": "{visual_emphasis}, location detail sheet, key areas, props, textures"}},
-          {{"view_type": "lighting_variations", "prompt": "{visual_emphasis}, same location, different lighting, day/night/golden hour"}}
+            {{ "view_type": "establishing_shot", "prompt": "..." }},
+            {{ "view_type": "lighting_study", "prompt": "..." }},
+            {{ "view_type": "texture_details", "prompt": "..." }}
         ]
       }}
+      // GENERATE OBJECTS FOR ALL LOCATIONS
     ],
     "props": [
       {{
         "id": "prop1",
-        "name": "Prop Name",
-        "json_profile": {{complete prop profile}},
-        "views": [
-          {{"view_type": "product_shot", "prompt": "{visual_emphasis}, product photography, white background, multiple angles"}},
-          {{"view_type": "in_context", "prompt": "{visual_emphasis}, prop in scene, showing scale and usage"}}
-        ]
+        "name": "Name",
+        "json_profile": {{ ... }},
+        "views": [ ... ]
       }}
     ],
     "vehicles": []
@@ -880,30 +737,21 @@ RETURN THIS EXACT JSON STRUCTURE:
   "scenes": [
     {{
       "scene_num": 1,
-      "timecode": "00:00-00:{seconds_per_scene:02d}",
-      "act": "1/2/3",
-      "beat": "narrative beat description",
-      "action": "Detailed action description in Korean",
-      "action_en": "Detailed action description in English",
-      "emotion": "Character emotional state",
-      "camera": {{
-        "shot_type": "wide/medium/close-up/extreme close-up",
-        "movement": "static/pan/tilt/dolly/crane/handheld/steadicam",
-        "lens": "focal length mm",
-        "angle": "eye level/low angle/high angle/dutch angle"
-      }},
-      "lighting": "Lighting setup description",
+      "timecode": "00:00-...",
+      "act": "1",
+      "action": "Description in Korean",
+      "emotion": "Emotion",
+      "camera": {{ "shot_type": "...", "movement": "...", "lens": "..." }},
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [SCENE ACTION], [CAMERA ANGLE], [LIGHTING], (Note: Do NOT write the character appearance details here. The system will automatically inject the FULL 'json_profile' details based on the used_turntables ID. Focus this prompt on the action and environment composition only.)",
-      "video_prompt": "Motion and camera movement description for video generation",
-      "audio_sync": "What musical element this syncs to"
+      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [SCENE ACTION], [CAMERA ANGLE]. (IMPORTANT: Do NOT describe character appearance here. The system injects 'json_profile' automatically. Focus on action/composition.)",
+      "video_prompt": "CRITICAL: Highly detailed prompt for Runway/Pika. Camera movement + Action + Physics + Technicals. Minimum 20 words."
     }}
   ]
 }}
 
-Generate exactly {scene_count} scenes with proper timecodes.
-Each scene timecode should reflect {seconds_per_scene} second duration.
-Ensure visual and narrative coherence throughout."""
+Generate exactly {scene_count} scenes.
+ENSURE ALL CHARACTERS/LOCATIONS mentioned in scenes have a corresponding entry in 'turntable'.
+"""
 
 # ------------------------------------------------------------------
 # JSON 프로필 텍스트 변환 (개선된 버전)
@@ -1524,34 +1372,34 @@ if submit_btn:
             )
             st.session_state['show_manual'] = True
 
-# 수동 모드 표시 (수정됨)
+# 수동 모드 표시 (st.expander로 수정됨)
 if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
     st.markdown("---")
-    st.markdown("### 📋 수동 모드 - AI 프롬프트")
     
-    # 버튼 및 안내 행
-    col_guide, col_gemini = st.columns([6, 1])
-    with col_guide:
-        st.caption("👇 아래 프롬프트의 우측 상단 '복사(📄)' 아이콘을 클릭하여 AI에게 전달하세요.")
-    with col_gemini:
-        st.link_button("🚀 Gemini 열기", "https://gemini.google.com/app", use_container_width=True)
-    
-    # 복사 버튼이 포함된 코드 블록으로 표시 (기존 text_area 대체)
-    st.code(st.session_state['manual_prompt'], language="text")
-    
-    st.markdown("### 📥 결과 붙여넣기")
-    manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")
-    
-    if st.button("✅ JSON 적용", type="primary"):
-        if manual_result:
-            try:
-                cleaned = clean_json_text(manual_result)
-                st.session_state['plan_data'] = json.loads(cleaned)
-                st.session_state['show_manual'] = False
-                st.success("✅ 적용 완료!")
-                st.rerun()
-            except json.JSONDecodeError as e:
-                st.error(f"JSON 파싱 오류: {e}")
+    # st.expander를 사용하여 접을 수 있게 만듦
+    with st.expander("📋 수동 모드 - AI 프롬프트 / JSON 입력 (클릭하여 펼치기)", expanded=False):
+        # 버튼 및 안내 행
+        col_guide, col_gemini = st.columns([6, 1])
+        with col_guide:
+            st.caption("👇 아래 프롬프트의 우측 상단 '복사(📄)' 아이콘을 클릭하여 AI에게 전달하세요.")
+        with col_gemini:
+            st.link_button("🚀 Gemini", "https://gemini.google.com/app", use_container_width=True)
+        
+        st.code(st.session_state['manual_prompt'], language="text")
+        
+        st.markdown("### 📥 결과 붙여넣기")
+        manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")
+        
+        if st.button("✅ JSON 적용", type="primary"):
+            if manual_result:
+                try:
+                    cleaned = clean_json_text(manual_result)
+                    st.session_state['plan_data'] = json.loads(cleaned)
+                    st.session_state['show_manual'] = False
+                    st.success("✅ 적용 완료!")
+                    st.rerun()
+                except json.JSONDecodeError as e:
+                    st.error(f"JSON 파싱 오류: {e}")
 
 # ------------------------------------------------------------------
 # 결과 표시
@@ -1840,7 +1688,7 @@ if st.session_state.get('plan_data'):
                     final_debug = apply_json_profiles_to_prompt(final_debug, scene['used_turntables'], plan.get('turntable', {}))
                 st.code(final_debug)
             
-            with st.expander("🎬 비디오 프롬프트"):
+            with st.expander("🎬 비디오 프롬프트 (Runway/Pika/Kling 용)"):
                 st.code(scene.get('video_prompt', ''))
             
             st.markdown("</div>", unsafe_allow_html=True)

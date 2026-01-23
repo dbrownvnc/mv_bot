@@ -225,22 +225,17 @@ MUSIC_GENRES = [
     "Orchestral/Cinematic", "Experimental", "Post-Rock", "Dream Pop", "Shoegaze"
 ]
 
-# --- 비주얼 스타일 강조 (특히 실사) ---
+# --- 비주얼 스타일 강조 (포토리얼리스틱 대폭 강화) ---
 def get_visual_style_emphasis(visual_style):
+    # 포토리얼리스틱 계열 강력한 프롬프트
+    photo_emphasis = """(EXTREMELY DETAILED REAL PHOTO:1.5), (8k resolution:1.2), (photorealistic:1.4), 
+RAW photo, Fujifilm XT3, shot on 50mm lens, f/1.8, natural skin texture, visible pores, soft lighting, 
+detailed eyes, distinct facial features, hyper-detailed, no CGI, no 3D render look, 
+authentic human imperfections, cinematic lighting, masterpiece, best quality"""
+
     style_map = {
-        "Photorealistic/Cinematic": """ULTRA PHOTOREALISTIC, INDISTINGUISHABLE FROM REAL PHOTOGRAPH, 
-shot on ARRI ALEXA 65, anamorphic lens, 8K RAW resolution, natural film grain, 
-REAL HUMAN with actual skin texture and pores, subsurface scattering on skin, 
-physically accurate lighting, global illumination, ray-traced reflections,
-professional cinematography by Roger Deakins, shallow depth of field f/1.4,
-real world materials and textures, lifelike eye reflections and catchlights,
-photographic color science, no CGI look, no uncanny valley, ACTUAL PHOTOGRAPH QUALITY""",
-        
-        "Hyperrealistic 8K": """HYPERREALISTIC 8K PHOTOGRAPHY, RED V-RAPTOR 8K VV sensor,
-real human photography, actual skin texture with imperfections, visible pores,
-photojournalistic quality, documentary realism, no digital enhancement look,
-natural ambient lighting, real shadows, genuine facial expressions,
-shot by Annie Leibovitz, magazine cover quality, undeniably real""",
+        "Photorealistic/Cinematic": photo_emphasis,
+        "Hyperrealistic 8K": photo_emphasis + ", RED V-RAPTOR 8K, documentary style",
         
         "Anime/Manga": """anime style, manga illustration, cel-shaded, vibrant anime colors, 
 expressive anime eyes, clean linework, anime aesthetic, Studio Ghibli quality,
@@ -569,30 +564,28 @@ COLOR SCIENCE:
 - Contrast ratio: Specify shadow/highlight relationship
 """
 
-    # 실사 강조
+    # 실사 강조 (강력한 규칙 추가)
     photorealistic_extra = ""
     if "Photorealistic" in visual_style or "Hyperrealistic" in visual_style:
         photorealistic_extra = """
 
-CRITICAL - PHOTOREALISTIC REQUIREMENTS:
-Every image prompt MUST emphasize:
-- "REAL PHOTOGRAPH, not CGI, not AI-generated looking"
-- "actual human with real skin texture, pores, imperfections"
-- "shot on professional cinema camera"
-- "natural lighting, no artificial look"
-- "documentary/candid quality"
-AVOID: plastic skin, uncanny valley, overly smooth, CGI appearance, digital art style"""
+CRITICAL - PHOTOREALISTIC REQUIREMENTS (MUST FOLLOW):
+ALL prompts MUST include:
+- "RAW photo, 8k resolution, photorealistic, dslr, soft lighting, high quality, film grain"
+- "REAL HUMAN, natural skin texture, visible pores, imperfections, peach fuzz, realistic eyes"
+- "No CGI, No 3D render look, No illustration style"
+- "Shot on Fujifilm XT3 or ARRI Alexa"
+"""
 
     json_detail = ""
     if use_json:
         json_detail = f"""
 
-ULTRA-DETAILED JSON PROFILES (MANDATORY CONSISTENCY RULE):
+ULTRA-DETAILED JSON PROFILES (SOURCE OF TRUTH):
 
-1. **SOURCE OF TRUTH**: The 'json_profile' field defines the absolute visual truth. 
-2. **CONSISTENCY**: When generating the 'scenes' later, you MUST NOT contradict these profiles. 
-3. **MANDATORY**: You MUST generate a turntable entry for **EVERY** significant character, location, prop, and vehicle that appears in the video. Do not leave any key element undefined.
-4. **DETAIL**: Provide specific HEX codes, materials, and exact measurements.
+1. **CONSISTENCY RULE**: The 'json_profile' field is the ABSOLUTE LAW. The visual descriptions in 'scenes' MUST match these profiles exactly.
+2. **MANDATORY**: You MUST generate a turntable entry for **EVERY** single character, location, prop, and vehicle that appears.
+3. **DETAIL**: Provide specific HEX codes, materials, brands, and exact measurements.
 
 For CHARACTERS:
 {{
@@ -615,10 +608,10 @@ For LOCATIONS:
 
 TURNTABLE REFERENCE SHEETS (COMPREHENSIVE & MANDATORY):
 
-You MUST create turntable entries for ALL distinct elements. If there are 3 different characters, create 3 character turntables. If there are 2 locations, create 2 location turntables.
+You MUST create turntable entries for ALL distinct elements.
 
-FOR EACH CHARACTER:
-- View 1: "full_turntable" (Front, Side, Back, 3/4 in one wide image)
+FOR EACH CHARACTER (Mandatory Views):
+- View 1: "full_turntable" -> PROMPT MUST BE: "split screen, 4 angles, front view, side view, back view, 3/4 view, same character, white background, full body, high resolution, character sheet"
 - View 2: "face_detail" (Extreme close-up, pore details, eyes)
 - View 3: "expression_sheet" (Neutral, Joy, Anger, Sorrow, Surprise)
 - View 4: "fashion_detail" (Clothing texture, shoes, accessories)
@@ -701,8 +694,8 @@ RETURN THIS EXACT JSON STRUCTURE:
         "name_en": "Name English",
         "json_profile": {{ ...FULL PHYSICAL/CLOTHING PROFILE... }},
         "views": [
-            {{ "view_type": "full_turntable", "prompt": "..." }},
-            {{ "view_type": "face_detail", "prompt": "..." }},
+            {{ "view_type": "full_turntable", "prompt": "{visual_emphasis}, split screen, 4 angles, front view, side view, back view, 3/4 view, same character, full body, white background" }},
+            {{ "view_type": "face_detail", "prompt": "{visual_emphasis}, extreme close up, face detail..." }},
             {{ "view_type": "expression_sheet", "prompt": "..." }},
             {{ "view_type": "fashion_detail", "prompt": "..." }},
             {{ "view_type": "cinematic_portrait", "prompt": "..." }}
@@ -743,7 +736,7 @@ RETURN THIS EXACT JSON STRUCTURE:
       "emotion": "Emotion",
       "camera": {{ "shot_type": "...", "movement": "...", "lens": "..." }},
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "{visual_emphasis}, {genre} aesthetic, [SCENE ACTION], [CAMERA ANGLE]. (IMPORTANT: Do NOT describe character appearance here. The system injects 'json_profile' automatically. Focus on action/composition.)",
+      "image_prompt": "{visual_emphasis}, [SCENE ACTION], [CAMERA ANGLE]. (IMPORTANT: Do NOT describe character appearance here. The system injects 'json_profile' automatically. Focus on action/composition.)",
       "video_prompt": "CRITICAL: Highly detailed prompt for Runway/Pika. Camera movement + Action + Physics + Technicals. Minimum 20 words."
     }}
   ]
@@ -1372,13 +1365,12 @@ if submit_btn:
             )
             st.session_state['show_manual'] = True
 
-# 수동 모드 표시 (st.expander로 수정됨)
+# 수동 모드 표시 (수정됨: 결과 붙여넣기 창 외부 노출)
 if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
     st.markdown("---")
     
-    # st.expander를 사용하여 접을 수 있게 만듦
-    with st.expander("📋 수동 모드 - AI 프롬프트 / JSON 입력 (클릭하여 펼치기)", expanded=False):
-        # 버튼 및 안내 행
+    # 1. AI 프롬프트 (접을 수 있음)
+    with st.expander("📋 수동 모드 - AI 프롬프트 (클릭하여 펼치기)", expanded=False):
         col_guide, col_gemini = st.columns([6, 1])
         with col_guide:
             st.caption("👇 아래 프롬프트의 우측 상단 '복사(📄)' 아이콘을 클릭하여 AI에게 전달하세요.")
@@ -1386,20 +1378,21 @@ if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
             st.link_button("🚀 Gemini", "https://gemini.google.com/app", use_container_width=True)
         
         st.code(st.session_state['manual_prompt'], language="text")
-        
-        st.markdown("### 📥 결과 붙여넣기")
-        manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")
-        
-        if st.button("✅ JSON 적용", type="primary"):
-            if manual_result:
-                try:
-                    cleaned = clean_json_text(manual_result)
-                    st.session_state['plan_data'] = json.loads(cleaned)
-                    st.session_state['show_manual'] = False
-                    st.success("✅ 적용 완료!")
-                    st.rerun()
-                except json.JSONDecodeError as e:
-                    st.error(f"JSON 파싱 오류: {e}")
+    
+    # 2. 결과 붙여넣기 (항상 보임)
+    st.markdown("### 📥 결과 붙여넣기 (JSON)")
+    manual_result = st.text_area("AI 응답 JSON을 여기에 붙여넣으세요:", height=300, key="manual_json_input")
+    
+    if st.button("✅ JSON 적용", type="primary"):
+        if manual_result:
+            try:
+                cleaned = clean_json_text(manual_result)
+                st.session_state['plan_data'] = json.loads(cleaned)
+                st.session_state['show_manual'] = False
+                st.success("✅ 적용 완료!")
+                st.rerun()
+            except json.JSONDecodeError as e:
+                st.error(f"JSON 파싱 오류: {e}")
 
 # ------------------------------------------------------------------
 # 결과 표시

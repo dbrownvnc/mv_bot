@@ -581,11 +581,16 @@ ALL prompts MUST include:
     if use_json:
         json_detail = f"""
 
-ULTRA-DETAILED JSON PROFILES (SOURCE OF TRUTH):
+ULTRA-DETAILED JSON PROFILES (SOURCE OF TRUTH - STRONGEST ENFORCEMENT):
 
-1. **CONSISTENCY RULE**: The 'json_profile' field is the ABSOLUTE LAW. The visual descriptions in 'scenes' MUST match these profiles exactly.
-2. **MANDATORY**: You MUST generate a turntable entry for **EVERY** single character, location, prop, and vehicle that appears.
-3. **DETAIL**: Provide specific HEX codes, materials, brands, and exact measurements.
+1. **SOURCE OF TRUTH RULE**: The 'json_profile' field is the ONLY valid source for physical appearance.
+2. **NEGATIVE CONSTRAINT FOR SCENES**: In the 'scenes' -> 'image_prompt' field, you MUST NOT describe the character's appearance (hair color, clothes, face). 
+   - **WRONG**: "A handsome man with blue hair and a leather jacket running in the rain."
+   - **CORRECT**: "A man running in the rain, dynamic angle, intense expression."
+   (The system will automatically INJECT the detailed description from 'json_profile' at the beginning of the prompt. If you repeat it, it causes conflicts.)
+
+3. **MANDATORY**: You MUST generate a turntable entry for **EVERY** single character, location, prop, and vehicle that appears.
+4. **DETAIL**: Provide specific HEX codes, materials, brands, and exact measurements.
 
 For CHARACTERS:
 {{
@@ -611,7 +616,7 @@ TURNTABLE REFERENCE SHEETS (COMPREHENSIVE & MANDATORY):
 You MUST create turntable entries for ALL distinct elements.
 
 FOR EACH CHARACTER (Mandatory Views):
-- View 1: "full_turntable" -> PROMPT MUST BE: "split screen, 4 angles, front view, side view, back view, 3/4 view, same character, white background, full body, high resolution, character sheet"
+- View 1: "full_turntable" -> PROMPT MUST BE: "character sheet, split screen, 4 distinct views, front view, side view, back view, 3/4 view, same character in all views, full body shot, white background, high resolution"
 - View 2: "face_detail" (Extreme close-up, pore details, eyes)
 - View 3: "expression_sheet" (Neutral, Joy, Anger, Sorrow, Surprise)
 - View 4: "fashion_detail" (Clothing texture, shoes, accessories)
@@ -694,7 +699,7 @@ RETURN THIS EXACT JSON STRUCTURE:
         "name_en": "Name English",
         "json_profile": {{ ...FULL PHYSICAL/CLOTHING PROFILE... }},
         "views": [
-            {{ "view_type": "full_turntable", "prompt": "{visual_emphasis}, split screen, 4 angles, front view, side view, back view, 3/4 view, same character, full body, white background" }},
+            {{ "view_type": "full_turntable", "prompt": "{visual_emphasis}, character sheet, split screen, 4 distinct views, front view, side view, back view, 3/4 view, same character, full body, white background" }},
             {{ "view_type": "face_detail", "prompt": "{visual_emphasis}, extreme close up, face detail..." }},
             {{ "view_type": "expression_sheet", "prompt": "..." }},
             {{ "view_type": "fashion_detail", "prompt": "..." }},
@@ -736,7 +741,7 @@ RETURN THIS EXACT JSON STRUCTURE:
       "emotion": "Emotion",
       "camera": {{ "shot_type": "...", "movement": "...", "lens": "..." }},
       "used_turntables": ["char1", "loc1"],
-      "image_prompt": "{visual_emphasis}, [SCENE ACTION], [CAMERA ANGLE]. (IMPORTANT: Do NOT describe character appearance here. The system injects 'json_profile' automatically. Focus on action/composition.)",
+      "image_prompt": "{visual_emphasis}, [SCENE ACTION], [CAMERA ANGLE]. (DO NOT describe appearance here. Focus on action.)",
       "video_prompt": "CRITICAL: Highly detailed prompt for Runway/Pika. Camera movement + Action + Physics + Technicals. Minimum 20 words."
     }}
   ]
@@ -794,9 +799,14 @@ def json_profile_to_ultra_detailed_text(profile):
         if 'jawline' in face: face_desc.append(f"Jawline: {face['jawline']}")
         if 'skin_details' in face: face_desc.append(f"Face Details: {face['skin_details']}")
         
+        if 'hair' in face: # Handle nested hair in face if structured that way
+             if isinstance(face['hair'], dict):
+                 h = face['hair']
+                 face_desc.append(f"Hair: {h.get('color', '')} {h.get('style', '')}")
+        
         if face_desc: parts.append("FACE[" + ", ".join(face_desc) + "]")
     
-    # 3. HAIR (Hair Details)
+    # 3. HAIR (Hair Details - Main)
     if 'hair' in profile and isinstance(profile['hair'], dict):
         hair = profile['hair']
         hair_desc = []

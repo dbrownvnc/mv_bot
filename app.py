@@ -426,7 +426,7 @@ with st.sidebar:
         else:
             segmind_key = st.text_input("Segmind API Key (선택)", type="password")
             
-        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+        model_options = ["gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
         gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
@@ -1547,7 +1547,10 @@ def generate_all_preview_images(plan_data, img_width, img_height, provider, use_
 # ------------------------------------------------------------------
 def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
-    models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    # 최신 Gemini API 모델 이름 사용
+    models_to_try = [model_name, "gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
+    # 중복 제거
+    models_to_try = list(dict.fromkeys(models_to_try))
     last_error = None
 
     for model in models_to_try:
@@ -1557,6 +1560,7 @@ def generate_with_fallback(prompt, api_key, model_name):
             return response.text, model
         except Exception as e:
             last_error = f"{model}: {str(e)}"
+            st.toast(f"⚠️ {model} 실패, 다음 모델 시도 중...")
             time.sleep(1)
     raise Exception(f"All models failed. Last error: {last_error}")
 

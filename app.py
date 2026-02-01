@@ -425,8 +425,9 @@ with st.sidebar:
             st.success("✅ Segmind Key 연결됨")
         else:
             segmind_key = st.text_input("Segmind API Key (선택)", type="password")
-            
-        model_options = ["gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
+
+        # 최신 Gemini API 모델 (2025)
+        model_options = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
@@ -1547,8 +1548,14 @@ def generate_all_preview_images(plan_data, img_width, img_height, provider, use_
 # ------------------------------------------------------------------
 def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
-    # 최신 Gemini API 모델 이름 사용
-    models_to_try = [model_name, "gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
+    # 최신 Gemini API 모델 (2025) - 안정적인 순서로 배열
+    models_to_try = [
+        model_name,
+        "gemini-2.5-flash",      # 최신 빠른 모델
+        "gemini-2.0-flash",      # 안정적인 모델
+        "gemini-1.5-flash",      # 레거시 빠른 모델
+        "gemini-1.5-pro",        # 레거시 고성능 모델
+    ]
     # 중복 제거
     models_to_try = list(dict.fromkeys(models_to_try))
     last_error = None

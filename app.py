@@ -1564,7 +1564,25 @@ def generate_with_fallback(prompt, api_key, model_name):
         try:
             gen_model = genai.GenerativeModel(model)
             response = gen_model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
-            return response.text, model
+
+            # 응답 텍스트 추출 (여러 방법 시도)
+            text = None
+            if hasattr(response, 'text') and response.text:
+                text = response.text
+            elif hasattr(response, 'parts') and response.parts:
+                text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+            elif hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            text = ''.join(part.text for part in candidate.content.parts if hasattr(part, 'text'))
+                            break
+
+            if text and len(text.strip()) > 0:
+                return text, model
+            else:
+                raise Exception("응답이 비어있음")
+
         except Exception as e:
             last_error = f"{model}: {str(e)}"
             st.toast(f"⚠️ {model} 실패, 다음 모델 시도 중...")
@@ -1578,7 +1596,18 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
             prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
 
+            # 응답 검증
+            if not response_text or len(response_text.strip()) == 0:
+                raise Exception("API 응답이 비어있습니다")
+
+            st.info(f"📥 {used_model}에서 {len(response_text)}자 응답 수신")
+
             cleaned = clean_json_text(response_text)
+
+            # 정리된 텍스트 검증
+            if not cleaned or len(cleaned.strip()) == 0:
+                raise Exception("JSON 추출 실패 - 응답에서 JSON을 찾을 수 없습니다")
+
             plan_data = json.loads(cleaned)
             st.toast(f"✅ 생성 완료 ({used_model})")
             return plan_data
@@ -1589,8 +1618,11 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
                 if response_text:
-                    with st.expander("🔍 생성된 원본 응답 확인"):
-                        st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
+                    st.error(f"응답 길이: {len(response_text)}자")
+                    with st.expander("🔍 생성된 원본 응답 확인 (처음 3000자)"):
+                        st.code(response_text[:3000] if len(response_text) > 3000 else response_text)
+                else:
+                    st.error("응답이 비어있습니다 - API 키 또는 모델을 확인하세요")
                 return None
         except Exception as e:
             if attempt < 2:
@@ -1598,6 +1630,9 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"생성 실패: {e}")
+                if response_text:
+                    with st.expander("🔍 원본 응답 확인"):
+                        st.code(response_text[:2000] if len(response_text) > 2000 else response_text)
                 return None
     return None
 

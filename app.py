@@ -447,6 +447,15 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+    st.markdown("---")
+
+    # 자동 스타일 설정 (접을 수 있는 메뉴)
+    with st.expander("🔄 자동 스타일 설정", expanded=False):
+        st.caption("주제 자동생성 시 체크된 항목을 자동 설정합니다")
+        auto_genre_enabled = st.checkbox("🎬 영상 장르 자동", value=st.session_state.get('auto_genre_enabled', False), key='auto_genre_enabled')
+        auto_visual_enabled = st.checkbox("🎨 비주얼 스타일 자동", value=st.session_state.get('auto_visual_enabled', False), key='auto_visual_enabled')
+        auto_music_enabled = st.checkbox("🎵 음악 장르 자동", value=st.session_state.get('auto_music_enabled', False), key='auto_music_enabled')
+
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director Pro")
 st.caption("업계 최고 수준의 뮤직비디오 기획 시스템")
@@ -468,10 +477,12 @@ defaults = {
     'plan_data': None,
     'generated_images': {},
     'turntable_images': {},
-    'auto_video_settings': False,
-    'auto_genre_idx': 0,
-    'auto_visual_idx': 0,
-    'auto_music_idx': 0
+    'auto_genre_enabled': False,
+    'auto_visual_enabled': False,
+    'auto_music_enabled': False,
+    'selected_genre_idx': 0,
+    'selected_visual_idx': 0,
+    'selected_music_idx': 0
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -482,20 +493,35 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
     st.markdown("### 🔥 바이럴 주제 생성기")
     
+    # 자동 스타일 설정 적용 함수
+    def apply_auto_style_settings(topic_text):
+        """체크된 항목에 대해 주제 기반 자동 스타일 설정 적용"""
+        if topic_text:
+            genre_idx, visual_idx, music_idx = analyze_topic_for_auto_settings(topic_text)
+            if st.session_state.get('auto_genre_enabled', False):
+                st.session_state.selected_genre_idx = genre_idx
+            if st.session_state.get('auto_visual_enabled', False):
+                st.session_state.selected_visual_idx = visual_idx
+            if st.session_state.get('auto_music_enabled', False):
+                st.session_state.selected_music_idx = music_idx
+
     col_t1, col_t2, col_t3 = st.columns(3)
     with col_t1:
         if st.button("🎲 랜덤 생성", use_container_width=True):
             st.session_state.random_topic = generate_trending_topic()
+            apply_auto_style_settings(st.session_state.random_topic)
             st.rerun()
     with col_t2:
         if st.button("🎲🎲 5개 생성", use_container_width=True):
             topics = [generate_trending_topic() for _ in range(5)]
             st.session_state.random_topic = "\n---\n".join(topics)
+            apply_auto_style_settings(topics[0])  # 첫 번째 주제 기준
             st.rerun()
     with col_t3:
         if st.button("🤖 AI 생성", use_container_width=True):
             if gemini_key:
                 st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
+                apply_auto_style_settings(st.session_state.random_topic)
                 st.rerun()
             else:
                 st.warning("API 키 필요")
@@ -503,7 +529,29 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     if st.session_state.random_topic:
         st.info(f"💡 {st.session_state.random_topic}")
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
+    # 장르/스타일 랜덤 선택 버튼 (form 밖)
+    st.markdown("#### 🎲 장르/스타일 랜덤 선택")
+    col_r1, col_r2, col_r3, col_r4 = st.columns([1, 1, 1, 1])
+    with col_r1:
+        if st.button("🎬 영상장르", use_container_width=True, key="rand_genre"):
+            st.session_state.selected_genre_idx = random.randint(0, len(VIDEO_GENRES) - 1)
+            st.rerun()
+    with col_r2:
+        if st.button("🎨 비주얼", use_container_width=True, key="rand_visual"):
+            st.session_state.selected_visual_idx = random.randint(0, len(VISUAL_STYLES) - 1)
+            st.rerun()
+    with col_r3:
+        if st.button("🎵 음악장르", use_container_width=True, key="rand_music"):
+            st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
+            st.rerun()
+    with col_r4:
+        if st.button("🎲 전체 랜덤", use_container_width=True, key="rand_all"):
+            st.session_state.selected_genre_idx = random.randint(0, len(VIDEO_GENRES) - 1)
+            st.session_state.selected_visual_idx = random.randint(0, len(VISUAL_STYLES) - 1)
+            st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
+            st.rerun()
+
     with st.form("project_form"):
         topic = st.text_area("🎯 영상 주제/컨셉", height=120, 
                             value=st.session_state.random_topic if st.session_state.random_topic else "",
@@ -512,30 +560,25 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         st.markdown("---")
         
         # JSON 프로필 옵션
-        col_opt1, col_opt2, col_opt3 = st.columns(3)
+        col_opt1, col_opt2 = st.columns(2)
         with col_opt1:
             use_json_profiles = st.checkbox("🎯 JSON 프로필 (극도 디테일)", value=True)
         with col_opt2:
             expert_mode = st.checkbox("🏆 전문가 모드 (심층 분석)", value=True)
-        with col_opt3:
-            auto_video_settings = st.checkbox("🔄 자동 스타일 설정", value=False,
-                help="주제에 맞게 영상장르, 비주얼 스타일, 음악장르를 자동으로 설정합니다")
 
         st.markdown("---")
 
-        # 장르/스타일 선택
-        if auto_video_settings:
-            st.info("🔄 자동 스타일 설정이 켜져 있습니다. 주제에 맞게 아래 설정이 자동으로 적용됩니다.")
+        # 장르/스타일 선택 (session_state 인덱스 사용)
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
-            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0,
-                disabled=auto_video_settings)
+            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES,
+                index=st.session_state.selected_genre_idx)
         with col_g2:
-            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0,
-                disabled=auto_video_settings)
+            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES,
+                index=st.session_state.selected_visual_idx)
         with col_g3:
-            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0,
-                disabled=auto_video_settings)
+            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES,
+                index=st.session_state.selected_music_idx)
 
         st.markdown("---")
         
@@ -1482,14 +1525,6 @@ if submit_btn:
             'use_emotional': use_emotional, 'use_climax': use_climax,
             'use_symbolic': use_symbolic, 'use_twist': use_twist
         }
-
-        # 자동 스타일 설정 적용
-        if auto_video_settings:
-            auto_genre_idx, auto_visual_idx, auto_music_idx = analyze_topic_for_auto_settings(topic)
-            selected_genre = VIDEO_GENRES[auto_genre_idx]
-            selected_visual = VISUAL_STYLES[auto_visual_idx]
-            selected_music = MUSIC_GENRES[auto_music_idx]
-            st.info(f"🔄 자동 설정 적용: 영상장르={selected_genre}, 비주얼={selected_visual}, 음악={selected_music}")
 
         if execution_mode == "API 자동 실행":
             if not gemini_key:

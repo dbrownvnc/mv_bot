@@ -219,11 +219,140 @@ VISUAL_STYLES = [
 ]
 
 MUSIC_GENRES = [
-    "Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical", 
+    "Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical",
     "Metal", "Indie", "K-Pop", "Lo-Fi", "Trap", "House", "Techno", "Ambient",
     "Synthwave", "Phonk", "Drill", "Afrobeat", "Latin", "Folk", "Country",
     "Orchestral/Cinematic", "Experimental", "Post-Rock", "Dream Pop", "Shoegaze"
 ]
+
+# --- 자동 영상 설정 (주제 기반) ---
+def analyze_topic_for_auto_settings(topic):
+    """주제를 분석하여 최적의 영상장르, 비주얼스타일, 음악장르 인덱스를 반환"""
+    topic_lower = topic.lower()
+
+    # 키워드 매핑 사전
+    genre_keywords = {
+        0: ["액션", "action", "전쟁", "war", "전투", "battle", "싸움", "fight", "추격", "chase", "폭발", "explosion"],
+        1: ["sf", "sci-fi", "우주", "space", "미래", "future", "로봇", "robot", "외계인", "alien", "우주선"],
+        2: ["판타지", "fantasy", "마법", "magic", "용", "dragon", "기사", "knight", "엘프", "elf", "던전"],
+        3: ["공포", "horror", "호러", "귀신", "ghost", "좀비", "zombie", "무서운", "scary", "심리", "psychological"],
+        4: ["사랑", "love", "연애", "romance", "이별", "breakup", "그리움", "longing", "첫사랑", "고백"],
+        5: ["느와르", "noir", "범죄", "crime", "탐정", "detective", "미스터리", "mystery", "암흑가"],
+        6: ["사이버펑크", "cyberpunk", "네온", "neon", "해커", "hacker", "디스토피아", "매트릭스"],
+        7: ["종말", "apocalypse", "폐허", "ruins", "서바이벌", "survival", "황무지", "wasteland"],
+        8: ["추상", "abstract", "초현실", "surreal", "꿈", "dream", "환각", "무의식"],
+        9: ["퍼포먼스", "performance", "무대", "stage", "라이브", "live", "콘서트", "concert"],
+        10: ["스토리", "story", "이야기", "narrative", "드라마", "drama", "서사"],
+        11: ["실험", "experimental", "아방가르드", "avant-garde", "예술", "art"],
+        12: ["애니메이션", "animation", "애니", "anime", "만화", "cartoon", "일본", "japan"],
+        13: ["다큐", "documentary", "실제", "real", "현실", "reality", "인터뷰"],
+        16: ["댄스", "dance", "춤", "안무", "choreography", "발레", "ballet", "힙합댄스"],
+        17: ["시", "poem", "시적", "poetic", "감성", "emotional", "서정"],
+        18: ["사회", "social", "비판", "critique", "메시지", "message", "현대사회"],
+        19: ["우주공포", "cosmic", "크툴루", "lovecraft", "미지", "unknown"],
+        20: ["마술적", "magical realism", "기묘한", "strange", "일상속비일상"],
+        21: ["미래도시", "dystopia", "통제사회", "빅브라더", "감시"],
+        22: ["역사", "historical", "시대극", "왕조", "중세", "고대"],
+        23: ["일상", "daily", "slice of life", "평범한", "소소한"]
+    }
+
+    visual_keywords = {
+        0: ["실사", "realistic", "영화", "cinematic", "현실적"],
+        1: ["초고화질", "8k", "4k", "하이퍼", "hyper", "극사실"],
+        2: ["애니", "anime", "망가", "manga", "일본애니", "셀애니"],
+        3: ["3d", "픽사", "pixar", "디즈니", "disney", "cg"],
+        4: ["2d", "셀", "전통", "hand-drawn"],
+        5: ["수채화", "watercolor", "파스텔", "부드러운"],
+        6: ["유화", "oil painting", "고전", "classical", "르네상스"],
+        7: ["사이버펑크", "cyberpunk", "네온", "neon", "미래도시"],
+        8: ["다크판타지", "dark fantasy", "고딕", "gothic", "어둠"],
+        9: ["파스텔", "pastel", "dreamy", "몽환", "부드러운"],
+        10: ["흑백", "b&w", "black and white", "모노크롬", "필름누아르"],
+        11: ["레트로", "retro", "80년대", "80s", "vhs", "복고"],
+        12: ["베이퍼웨이브", "vaporwave", "증기파", "핑크", "보라"],
+        13: ["로파이", "lo-fi", "인디", "indie", "그런지"],
+        14: ["패션", "fashion", "하이패션", "에디토리얼", "보그"],
+        15: ["다큐", "documentary", "거친", "gritty", "리얼"],
+        16: ["초현실", "surrealist", "달리", "마그리트", "기묘한"],
+        17: ["미니멀", "minimal", "심플", "simple", "깔끔한"],
+        18: ["맥시멀", "maximalist", "화려한", "바로크", "baroque"],
+        19: ["글리치", "glitch", "디지털", "digital", "노이즈"]
+    }
+
+    music_keywords = {
+        0: ["팝", "pop", "대중", "mainstream"],
+        1: ["록", "rock", "기타", "guitar", "밴드"],
+        2: ["힙합", "hip-hop", "랩", "rap", "비트"],
+        3: ["일렉", "electronic", "edm", "클럽", "club"],
+        4: ["알앤비", "r&b", "소울", "soul", "감미로운"],
+        5: ["재즈", "jazz", "스윙", "swing", "블루스"],
+        6: ["클래식", "classical", "오케스트라", "피아노", "바이올린"],
+        7: ["메탈", "metal", "헤비", "heavy", "하드록"],
+        8: ["인디", "indie", "독립", "alternative"],
+        9: ["케이팝", "k-pop", "kpop", "아이돌", "idol"],
+        10: ["로파이", "lo-fi", "lofi", "잔잔한", "공부"],
+        11: ["트랩", "trap", "808", "베이스"],
+        12: ["하우스", "house", "디스코", "disco"],
+        13: ["테크노", "techno", "언더그라운드"],
+        14: ["앰비언트", "ambient", "분위기", "배경음악"],
+        15: ["신스웨이브", "synthwave", "레트로", "80년대음악"],
+        16: ["퐁크", "phonk", "drift", "드리프트"],
+        17: ["드릴", "drill", "영국", "uk"],
+        18: ["아프로비트", "afrobeat", "아프리카"],
+        19: ["라틴", "latin", "레게톤", "살사"],
+        20: ["포크", "folk", "어쿠스틱", "acoustic"],
+        21: ["컨트리", "country", "미국남부"],
+        22: ["오케스트라", "orchestral", "cinematic", "영화음악", "웅장"],
+        23: ["실험음악", "experimental", "노이즈"],
+        24: ["포스트록", "post-rock", "슬로우"],
+        25: ["드림팝", "dream pop", "몽환적"],
+        26: ["슈게이징", "shoegaze", "노이즈팝"]
+    }
+
+    def find_best_match(keywords_dict, default=0):
+        scores = {idx: 0 for idx in keywords_dict}
+        for idx, keywords in keywords_dict.items():
+            for keyword in keywords:
+                if keyword in topic_lower:
+                    scores[idx] += 1
+
+        max_score = max(scores.values())
+        if max_score > 0:
+            for idx, score in scores.items():
+                if score == max_score:
+                    return idx
+        return default
+
+    genre_idx = find_best_match(genre_keywords, 0)
+    visual_idx = find_best_match(visual_keywords, 0)
+    music_idx = find_best_match(music_keywords, 0)
+
+    # 장르-스타일 연관성 보정
+    genre_visual_mapping = {
+        6: 7,   # Cyberpunk → Cyberpunk Neon
+        2: 8,   # Dark Fantasy → Dark Fantasy Gothic
+        12: 2,  # Anime/Animation → Anime/Manga
+        3: 8,   # Psychological Horror → Dark Fantasy Gothic
+        5: 10,  # Neo-Noir → Black & White Film Noir
+        22: 6,  # Historical Epic → Oil Painting Classical
+    }
+
+    genre_music_mapping = {
+        6: 15,  # Cyberpunk → Synthwave
+        12: 9,  # Anime/Animation → K-Pop or J-Pop related
+        22: 22, # Historical Epic → Orchestral/Cinematic
+        3: 14,  # Psychological Horror → Ambient
+        1: 3,   # Sci-Fi Epic → Electronic/EDM
+    }
+
+    # 스타일이 기본값이면 장르에 맞춰 보정
+    if visual_idx == 0 and genre_idx in genre_visual_mapping:
+        visual_idx = genre_visual_mapping[genre_idx]
+
+    if music_idx == 0 and genre_idx in genre_music_mapping:
+        music_idx = genre_music_mapping[genre_idx]
+
+    return genre_idx, visual_idx, music_idx
 
 # --- 비주얼 스타일 강조 (포토리얼리스틱 대폭 강화) ---
 def get_visual_style_emphasis(visual_style):
@@ -338,7 +467,11 @@ defaults = {
     'random_topic': "",
     'plan_data': None,
     'generated_images': {},
-    'turntable_images': {}
+    'turntable_images': {},
+    'auto_video_settings': False,
+    'auto_genre_idx': 0,
+    'auto_visual_idx': 0,
+    'auto_music_idx': 0
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -379,23 +512,31 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         st.markdown("---")
         
         # JSON 프로필 옵션
-        col_opt1, col_opt2 = st.columns(2)
+        col_opt1, col_opt2, col_opt3 = st.columns(3)
         with col_opt1:
             use_json_profiles = st.checkbox("🎯 JSON 프로필 (극도 디테일)", value=True)
         with col_opt2:
             expert_mode = st.checkbox("🏆 전문가 모드 (심층 분석)", value=True)
-        
+        with col_opt3:
+            auto_video_settings = st.checkbox("🔄 자동 스타일 설정", value=False,
+                help="주제에 맞게 영상장르, 비주얼 스타일, 음악장르를 자동으로 설정합니다")
+
         st.markdown("---")
-        
+
         # 장르/스타일 선택
+        if auto_video_settings:
+            st.info("🔄 자동 스타일 설정이 켜져 있습니다. 주제에 맞게 아래 설정이 자동으로 적용됩니다.")
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
-            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0)
+            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0,
+                disabled=auto_video_settings)
         with col_g2:
-            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0)
+            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0,
+                disabled=auto_video_settings)
         with col_g3:
-            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0)
-        
+            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0,
+                disabled=auto_video_settings)
+
         st.markdown("---")
         
         # 비율 및 런닝타임
@@ -1341,7 +1482,15 @@ if submit_btn:
             'use_emotional': use_emotional, 'use_climax': use_climax,
             'use_symbolic': use_symbolic, 'use_twist': use_twist
         }
-        
+
+        # 자동 스타일 설정 적용
+        if auto_video_settings:
+            auto_genre_idx, auto_visual_idx, auto_music_idx = analyze_topic_for_auto_settings(topic)
+            selected_genre = VIDEO_GENRES[auto_genre_idx]
+            selected_visual = VISUAL_STYLES[auto_visual_idx]
+            selected_music = MUSIC_GENRES[auto_music_idx]
+            st.info(f"🔄 자동 설정 적용: 영상장르={selected_genre}, 비주얼={selected_visual}, 음악={selected_music}")
+
         if execution_mode == "API 자동 실행":
             if not gemini_key:
                 st.warning("⚠️ API Key가 필요합니다")

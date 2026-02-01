@@ -201,6 +201,71 @@ def get_api_key(key_name):
     elif os.getenv(key_name): return os.getenv(key_name)
     return None
 
+# --- 프로젝트 저장/불러오기 (JSONBin) ---
+JSONBIN_API_URL = "https://api.jsonbin.io/v3"
+
+def save_to_jsonbin(data, api_key, bin_name=None):
+    """JSONBin에 프로젝트 저장"""
+    headers = {
+        "Content-Type": "application/json",
+        "X-Master-Key": api_key
+    }
+    if bin_name:
+        headers["X-Bin-Name"] = bin_name
+
+    try:
+        response = requests.post(f"{JSONBIN_API_URL}/b", json=data, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("metadata", {}).get("id"), None
+        else:
+            return None, f"저장 실패: {response.status_code} - {response.text[:100]}"
+    except Exception as e:
+        return None, f"저장 오류: {str(e)}"
+
+def load_from_jsonbin(bin_id, api_key):
+    """JSONBin에서 프로젝트 불러오기"""
+    headers = {"X-Master-Key": api_key}
+
+    try:
+        response = requests.get(f"{JSONBIN_API_URL}/b/{bin_id}/latest", headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("record"), None
+        else:
+            return None, f"불러오기 실패: {response.status_code}"
+    except Exception as e:
+        return None, f"불러오기 오류: {str(e)}"
+
+def list_jsonbin_bins(api_key):
+    """JSONBin에서 저장된 프로젝트 목록 조회"""
+    headers = {"X-Master-Key": api_key}
+
+    try:
+        response = requests.get(f"{JSONBIN_API_URL}/c/uncategorized/bins", headers=headers, timeout=30)
+        if response.status_code == 200:
+            return response.json(), None
+        else:
+            return [], f"목록 조회 실패: {response.status_code}"
+    except Exception as e:
+        return [], f"목록 조회 오류: {str(e)}"
+
+def prepare_project_for_save(plan_data, topic="", settings=None):
+    """프로젝트 데이터를 저장용으로 준비 (이미지 제외)"""
+    save_data = {
+        "version": "1.0",
+        "saved_at": datetime.now().isoformat(),
+        "topic": topic,
+        "settings": settings or {},
+        "plan_data": plan_data
+    }
+    return save_data
+
+def export_project_json(plan_data, topic="", settings=None):
+    """프로젝트를 JSON 문자열로 내보내기"""
+    save_data = prepare_project_for_save(plan_data, topic, settings)
+    return json.dumps(save_data, ensure_ascii=False, indent=2)
+
 # --- 장르/스타일 (확장) ---
 VIDEO_GENRES = [
     "Action/Thriller", "Sci-Fi Epic", "Dark Fantasy", "Psychological Horror", "Romantic Drama", 
@@ -456,6 +521,101 @@ with st.sidebar:
         auto_genre_enabled = st.checkbox("🎬 영상 장르 자동", value=st.session_state.get('auto_genre_enabled', False), key='auto_genre_enabled')
         auto_visual_enabled = st.checkbox("🎨 비주얼 스타일 자동", value=st.session_state.get('auto_visual_enabled', False), key='auto_visual_enabled')
         auto_music_enabled = st.checkbox("🎵 음악 장르 자동", value=st.session_state.get('auto_music_enabled', False), key='auto_music_enabled')
+
+    # 프로젝트 저장/불러오기
+    with st.expander("💾 프로젝트 관리", expanded=False):
+        save_method = st.radio("저장 방식", ["로컬 파일", "클라우드 (JSONBin)"], horizontal=True, key="save_method")
+
+        if save_method == "클라우드 (JSONBin)":
+            jsonbin_key = get_api_key("JSONBIN_API_KEY")
+            if not jsonbin_key:
+                jsonbin_key = st.text_input("JSONBin API Key", type="password", key="jsonbin_key_input",
+                    help="https://jsonbin.io 에서 무료 API 키 발급")
+
+            if jsonbin_key:
+                st.success("✅ JSONBin 연결됨")
+
+                # 클라우드 저장
+                if st.button("☁️ 클라우드에 저장", use_container_width=True, key="save_cloud"):
+                    if st.session_state.get('plan_data'):
+                        project_name = st.session_state['plan_data'].get('project_title', 'Untitled')
+                        save_data = prepare_project_for_save(
+                            st.session_state['plan_data'],
+                            st.session_state.get('random_topic', ''),
+                            {
+                                'scene_count': st.session_state.get('scene_count', 8),
+                                'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
+                            }
+                        )
+                        bin_id, error = save_to_jsonbin(save_data, jsonbin_key, project_name)
+                        if bin_id:
+                            st.success(f"✅ 저장 완료!")
+                            st.code(bin_id, language=None)
+                            st.caption("위 ID를 저장해두세요")
+                        else:
+                            st.error(error)
+                    else:
+                        st.warning("저장할 프로젝트가 없습니다")
+
+                # 클라우드에서 불러오기
+                st.markdown("---")
+                load_bin_id = st.text_input("프로젝트 ID 입력", key="load_bin_id", placeholder="저장 시 받은 ID")
+                if st.button("☁️ 클라우드에서 불러오기", use_container_width=True, key="load_cloud"):
+                    if load_bin_id:
+                        data, error = load_from_jsonbin(load_bin_id, jsonbin_key)
+                        if data:
+                            st.session_state['plan_data'] = data.get('plan_data')
+                            st.session_state['random_topic'] = data.get('topic', '')
+                            if data.get('settings'):
+                                st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
+                                st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
+                            st.success("✅ 불러오기 완료!")
+                            st.rerun()
+                        else:
+                            st.error(error)
+                    else:
+                        st.warning("프로젝트 ID를 입력하세요")
+        else:
+            # 로컬 파일 저장
+            if st.session_state.get('plan_data'):
+                project_json = export_project_json(
+                    st.session_state['plan_data'],
+                    st.session_state.get('random_topic', ''),
+                    {
+                        'scene_count': st.session_state.get('scene_count', 8),
+                        'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
+                    }
+                )
+                project_name = st.session_state['plan_data'].get('project_title', 'project')
+                safe_name = re.sub(r'[^\w\s-]', '', project_name).strip().replace(' ', '_')
+
+                st.download_button(
+                    label="💾 프로젝트 다운로드 (.json)",
+                    data=project_json,
+                    file_name=f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            else:
+                st.caption("저장할 프로젝트가 없습니다")
+
+            # 로컬 파일 불러오기
+            st.markdown("---")
+            uploaded_file = st.file_uploader("프로젝트 파일 불러오기", type=['json'], key="upload_project")
+            if uploaded_file:
+                try:
+                    content = uploaded_file.read().decode('utf-8')
+                    data = json.loads(content)
+                    if st.button("📂 불러오기 적용", use_container_width=True):
+                        st.session_state['plan_data'] = data.get('plan_data', data)
+                        st.session_state['random_topic'] = data.get('topic', '')
+                        if data.get('settings'):
+                            st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
+                            st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
+                        st.success("✅ 불러오기 완료!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"파일 읽기 오류: {e}")
 
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director Pro")

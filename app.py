@@ -1465,8 +1465,76 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
             pass
         if attempt < max_retries - 1:
             time.sleep(2)
-            
+
     return None, None
+
+def get_preview_size(width, height):
+    """프리뷰용 저화질 사이즈 계산 (원본의 50% 또는 최대 512px)"""
+    scale = min(512 / max(width, height), 0.5)
+    preview_w = max(256, int(width * scale))
+    preview_h = max(256, int(height * scale))
+    # 8의 배수로 맞춤 (이미지 생성 모델 요구사항)
+    preview_w = (preview_w // 8) * 8
+    preview_h = (preview_h // 8) * 8
+    return preview_w, preview_h
+
+def generate_all_preview_images(plan_data, img_width, img_height, provider, use_json=True, max_retries=2):
+    """모든 씬의 프리뷰 이미지를 자동 생성"""
+    if not plan_data:
+        return
+
+    scenes = plan_data.get('scenes', [])
+    if not scenes:
+        return
+
+    # 프리뷰용 저화질 사이즈
+    preview_w, preview_h = get_preview_size(img_width, img_height)
+
+    # 진행 상태 표시
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    generated_count = 0
+    total_scenes = len(scenes)
+
+    for idx, scene in enumerate(scenes):
+        scene_num = scene.get('scene_num', idx + 1)
+        status_text.text(f"🎨 프리뷰 이미지 생성 중... ({idx + 1}/{total_scenes}) - Scene {scene_num}")
+
+        # 이미지 프롬프트 가져오기
+        base_prompt = scene.get('image_prompt', '')
+        if not base_prompt:
+            continue
+
+        # JSON 프로필 적용
+        if use_json and 'used_turntables' in scene:
+            final_prompt = apply_json_profiles_to_prompt(
+                base_prompt,
+                scene['used_turntables'],
+                plan_data.get('turntable', {})
+            )
+        else:
+            final_prompt = base_prompt
+
+        # 프리뷰 이미지 생성
+        img, _ = try_generate_image_with_fallback(final_prompt, preview_w, preview_h, provider, max_retries)
+
+        if img:
+            if 'generated_images' not in st.session_state:
+                st.session_state['generated_images'] = {}
+            st.session_state['generated_images'][scene_num] = img
+            generated_count += 1
+
+        progress_bar.progress((idx + 1) / total_scenes)
+        time.sleep(0.3)  # API 부하 방지
+
+    progress_bar.empty()
+    status_text.empty()
+
+    if generated_count > 0:
+        st.toast(f"✅ {generated_count}개 프리뷰 이미지 생성 완료! ({preview_w}x{preview_h})")
+
+    return generated_count
 
 # ------------------------------------------------------------------
 # API 생성
@@ -1551,6 +1619,18 @@ if submit_btn:
                 
                 if st.session_state['plan_data']:
                     st.success("✅ 기획안 생성 완료!")
+
+                    # 자동 이미지 생성이 켜져 있으면 프리뷰 이미지 생성
+                    if auto_generate:
+                        st.info("🎨 자동 프리뷰 이미지 생성을 시작합니다...")
+                        generate_all_preview_images(
+                            st.session_state['plan_data'],
+                            image_width, image_height,
+                            image_provider,
+                            use_json=use_json_profiles,
+                            max_retries=2
+                        )
+
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
@@ -1588,6 +1668,21 @@ if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
                 st.session_state['plan_data'] = json.loads(cleaned)
                 st.session_state['show_manual'] = False
                 st.success("✅ 적용 완료!")
+
+                # 자동 이미지 생성이 켜져 있으면 프리뷰 이미지 생성
+                if auto_generate:
+                    st.info("🎨 자동 프리뷰 이미지 생성을 시작합니다...")
+                    img_w = st.session_state.get('image_width', 1024)
+                    img_h = st.session_state.get('image_height', 576)
+                    use_json = st.session_state.get('use_json_profiles', True)
+                    generate_all_preview_images(
+                        st.session_state['plan_data'],
+                        img_w, img_h,
+                        image_provider,
+                        use_json=use_json,
+                        max_retries=2
+                    )
+
                 st.rerun()
             except json.JSONDecodeError as e:
                 st.error(f"JSON 파싱 오류: {e}")

@@ -1474,22 +1474,25 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
 def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
     models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-    
-    for model_name in models_to_try:
+    last_error = None
+
+    for model in models_to_try:
         try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
-            return response.text, model_name
+            gen_model = genai.GenerativeModel(model)
+            response = gen_model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
+            return response.text, model
         except Exception as e:
+            last_error = f"{model}: {str(e)}"
             time.sleep(1)
-    raise Exception("All models failed")
+    raise Exception(f"All models failed. Last error: {last_error}")
 
 def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
+    response_text = None
     for attempt in range(3):
         try:
             prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-            
+
             cleaned = clean_json_text(response_text)
             plan_data = json.loads(cleaned)
             st.toast(f"✅ 생성 완료 ({used_model})")
@@ -1500,12 +1503,13 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
-                with st.expander("🔍 생성된 원본 응답 확인"):
-                    st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
+                if response_text:
+                    with st.expander("🔍 생성된 원본 응답 확인"):
+                        st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
                 return None
         except Exception as e:
             if attempt < 2:
-                st.warning(f"재시도 중... ({attempt+1}/3)")
+                st.warning(f"재시도 중... ({attempt+1}/3) - {str(e)[:100]}")
                 time.sleep(2)
             else:
                 st.error(f"생성 실패: {e}")

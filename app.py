@@ -552,6 +552,54 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
             st.rerun()
 
+    # 타임라인 설정 (form 밖에서 실시간 업데이트)
+    st.markdown("#### ⏱️ 타임라인 설정")
+    duration_mode = st.radio("런닝타임 설정 방식", ["총 런닝타임 기준", "씬 개수 직접 지정"],
+                             horizontal=True, key="duration_mode")
+
+    if duration_mode == "총 런닝타임 기준":
+        col_d1, col_d2, col_d3 = st.columns(3)
+        with col_d1:
+            total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=600,
+                                            value=st.session_state.total_duration, step=5,
+                                            key="input_total_duration")
+        with col_d2:
+            seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene,
+                                         key="input_seconds_per_scene")
+        with col_d3:
+            scene_count = max(1, int(total_duration / seconds_per_scene))
+            st.markdown(f"""
+            <div class='realtime-calc'>
+                📊 총 <b>{scene_count}</b>개 씬<br>
+                <small>{total_duration}초 ÷ {seconds_per_scene}초</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.session_state.scene_count = scene_count
+        st.session_state.total_duration = total_duration
+        st.session_state.seconds_per_scene = seconds_per_scene
+    else:
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            scene_count = st.number_input("씬 개수", min_value=2, max_value=50,
+                                         value=st.session_state.scene_count, step=1,
+                                         key="input_scene_count")
+        with col_s2:
+            seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene,
+                                         key="input_seconds_per_scene_2")
+        with col_s3:
+            total_duration = scene_count * seconds_per_scene
+            st.markdown(f"""
+            <div class='realtime-calc'>
+                ⏱️ 총 <b>{total_duration}</b>초<br>
+                <small>({total_duration//60}분 {total_duration%60}초)</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.session_state.scene_count = scene_count
+        st.session_state.seconds_per_scene = seconds_per_scene
+        st.session_state.total_duration = total_duration
+
     with st.form("project_form"):
         topic = st.text_area("🎯 영상 주제/컨셉", height=120, 
                             value=st.session_state.random_topic if st.session_state.random_topic else "",
@@ -581,57 +629,15 @@ with st.expander("📝 프로젝트 설정", expanded=True):
                 index=st.session_state.selected_music_idx)
 
         st.markdown("---")
-        
-        # 비율 및 런닝타임
-        col1, col2 = st.columns(2)
-        with col1:
-            aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
-            image_width, image_height = ratio_map[aspect_ratio]
-        
-        with col2:
-            duration_mode = st.radio("⏱️ 런닝타임 설정 방식", ["총 런닝타임 기준", "씬 개수 직접 지정"], horizontal=True)
-        
-        # 런닝타임/씬 설정 (실시간 동기화)
-        st.markdown("#### ⏱️ 타임라인 설정")
-        
-        if duration_mode == "총 런닝타임 기준":
-            col_d1, col_d2, col_d3 = st.columns(3)
-            with col_d1:
-                total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=600, 
-                                                value=st.session_state.total_duration, step=5)
-            with col_d2:
-                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
-            with col_d3:
-                scene_count = max(1, int(total_duration / seconds_per_scene))
-                st.markdown(f"""
-                <div class='realtime-calc'>
-                    📊 총 {scene_count}개 씬<br>
-                    <small>{total_duration}초 ÷ {seconds_per_scene}초</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.session_state.scene_count = scene_count
-            st.session_state.total_duration = total_duration
-            st.session_state.seconds_per_scene = seconds_per_scene
-        else:
-            col_s1, col_s2, col_s3 = st.columns(3)
-            with col_s1:
-                scene_count = st.number_input("씬 개수", min_value=2, max_value=50, 
-                                             value=st.session_state.scene_count, step=1)
-            with col_s2:
-                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
-            with col_s3:
-                total_duration = scene_count * seconds_per_scene
-                st.markdown(f"""
-                <div class='realtime-calc'>
-                    ⏱️ 총 {total_duration}초<br>
-                    <small>({total_duration//60}분 {total_duration%60}초)</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.session_state.scene_count = scene_count
-            st.session_state.seconds_per_scene = seconds_per_scene
-        
+
+        # 화면 비율
+        aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
+        image_width, image_height = ratio_map[aspect_ratio]
+
+        # 타임라인 정보는 form 밖에서 설정된 session_state 값 사용
+        scene_count = st.session_state.scene_count
+        seconds_per_scene = st.session_state.seconds_per_scene
+
         st.markdown("---")
         
         # 스토리 옵션

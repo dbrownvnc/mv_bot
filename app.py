@@ -219,11 +219,140 @@ VISUAL_STYLES = [
 ]
 
 MUSIC_GENRES = [
-    "Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical", 
+    "Pop", "Rock", "Hip-Hop/Rap", "Electronic/EDM", "R&B/Soul", "Jazz", "Classical",
     "Metal", "Indie", "K-Pop", "Lo-Fi", "Trap", "House", "Techno", "Ambient",
     "Synthwave", "Phonk", "Drill", "Afrobeat", "Latin", "Folk", "Country",
     "Orchestral/Cinematic", "Experimental", "Post-Rock", "Dream Pop", "Shoegaze"
 ]
+
+# --- 자동 영상 설정 (주제 기반) ---
+def analyze_topic_for_auto_settings(topic):
+    """주제를 분석하여 최적의 영상장르, 비주얼스타일, 음악장르 인덱스를 반환"""
+    topic_lower = topic.lower()
+
+    # 키워드 매핑 사전
+    genre_keywords = {
+        0: ["액션", "action", "전쟁", "war", "전투", "battle", "싸움", "fight", "추격", "chase", "폭발", "explosion"],
+        1: ["sf", "sci-fi", "우주", "space", "미래", "future", "로봇", "robot", "외계인", "alien", "우주선"],
+        2: ["판타지", "fantasy", "마법", "magic", "용", "dragon", "기사", "knight", "엘프", "elf", "던전"],
+        3: ["공포", "horror", "호러", "귀신", "ghost", "좀비", "zombie", "무서운", "scary", "심리", "psychological"],
+        4: ["사랑", "love", "연애", "romance", "이별", "breakup", "그리움", "longing", "첫사랑", "고백"],
+        5: ["느와르", "noir", "범죄", "crime", "탐정", "detective", "미스터리", "mystery", "암흑가"],
+        6: ["사이버펑크", "cyberpunk", "네온", "neon", "해커", "hacker", "디스토피아", "매트릭스"],
+        7: ["종말", "apocalypse", "폐허", "ruins", "서바이벌", "survival", "황무지", "wasteland"],
+        8: ["추상", "abstract", "초현실", "surreal", "꿈", "dream", "환각", "무의식"],
+        9: ["퍼포먼스", "performance", "무대", "stage", "라이브", "live", "콘서트", "concert"],
+        10: ["스토리", "story", "이야기", "narrative", "드라마", "drama", "서사"],
+        11: ["실험", "experimental", "아방가르드", "avant-garde", "예술", "art"],
+        12: ["애니메이션", "animation", "애니", "anime", "만화", "cartoon", "일본", "japan"],
+        13: ["다큐", "documentary", "실제", "real", "현실", "reality", "인터뷰"],
+        16: ["댄스", "dance", "춤", "안무", "choreography", "발레", "ballet", "힙합댄스"],
+        17: ["시", "poem", "시적", "poetic", "감성", "emotional", "서정"],
+        18: ["사회", "social", "비판", "critique", "메시지", "message", "현대사회"],
+        19: ["우주공포", "cosmic", "크툴루", "lovecraft", "미지", "unknown"],
+        20: ["마술적", "magical realism", "기묘한", "strange", "일상속비일상"],
+        21: ["미래도시", "dystopia", "통제사회", "빅브라더", "감시"],
+        22: ["역사", "historical", "시대극", "왕조", "중세", "고대"],
+        23: ["일상", "daily", "slice of life", "평범한", "소소한"]
+    }
+
+    visual_keywords = {
+        0: ["실사", "realistic", "영화", "cinematic", "현실적"],
+        1: ["초고화질", "8k", "4k", "하이퍼", "hyper", "극사실"],
+        2: ["애니", "anime", "망가", "manga", "일본애니", "셀애니"],
+        3: ["3d", "픽사", "pixar", "디즈니", "disney", "cg"],
+        4: ["2d", "셀", "전통", "hand-drawn"],
+        5: ["수채화", "watercolor", "파스텔", "부드러운"],
+        6: ["유화", "oil painting", "고전", "classical", "르네상스"],
+        7: ["사이버펑크", "cyberpunk", "네온", "neon", "미래도시"],
+        8: ["다크판타지", "dark fantasy", "고딕", "gothic", "어둠"],
+        9: ["파스텔", "pastel", "dreamy", "몽환", "부드러운"],
+        10: ["흑백", "b&w", "black and white", "모노크롬", "필름누아르"],
+        11: ["레트로", "retro", "80년대", "80s", "vhs", "복고"],
+        12: ["베이퍼웨이브", "vaporwave", "증기파", "핑크", "보라"],
+        13: ["로파이", "lo-fi", "인디", "indie", "그런지"],
+        14: ["패션", "fashion", "하이패션", "에디토리얼", "보그"],
+        15: ["다큐", "documentary", "거친", "gritty", "리얼"],
+        16: ["초현실", "surrealist", "달리", "마그리트", "기묘한"],
+        17: ["미니멀", "minimal", "심플", "simple", "깔끔한"],
+        18: ["맥시멀", "maximalist", "화려한", "바로크", "baroque"],
+        19: ["글리치", "glitch", "디지털", "digital", "노이즈"]
+    }
+
+    music_keywords = {
+        0: ["팝", "pop", "대중", "mainstream"],
+        1: ["록", "rock", "기타", "guitar", "밴드"],
+        2: ["힙합", "hip-hop", "랩", "rap", "비트"],
+        3: ["일렉", "electronic", "edm", "클럽", "club"],
+        4: ["알앤비", "r&b", "소울", "soul", "감미로운"],
+        5: ["재즈", "jazz", "스윙", "swing", "블루스"],
+        6: ["클래식", "classical", "오케스트라", "피아노", "바이올린"],
+        7: ["메탈", "metal", "헤비", "heavy", "하드록"],
+        8: ["인디", "indie", "독립", "alternative"],
+        9: ["케이팝", "k-pop", "kpop", "아이돌", "idol"],
+        10: ["로파이", "lo-fi", "lofi", "잔잔한", "공부"],
+        11: ["트랩", "trap", "808", "베이스"],
+        12: ["하우스", "house", "디스코", "disco"],
+        13: ["테크노", "techno", "언더그라운드"],
+        14: ["앰비언트", "ambient", "분위기", "배경음악"],
+        15: ["신스웨이브", "synthwave", "레트로", "80년대음악"],
+        16: ["퐁크", "phonk", "drift", "드리프트"],
+        17: ["드릴", "drill", "영국", "uk"],
+        18: ["아프로비트", "afrobeat", "아프리카"],
+        19: ["라틴", "latin", "레게톤", "살사"],
+        20: ["포크", "folk", "어쿠스틱", "acoustic"],
+        21: ["컨트리", "country", "미국남부"],
+        22: ["오케스트라", "orchestral", "cinematic", "영화음악", "웅장"],
+        23: ["실험음악", "experimental", "노이즈"],
+        24: ["포스트록", "post-rock", "슬로우"],
+        25: ["드림팝", "dream pop", "몽환적"],
+        26: ["슈게이징", "shoegaze", "노이즈팝"]
+    }
+
+    def find_best_match(keywords_dict, default=0):
+        scores = {idx: 0 for idx in keywords_dict}
+        for idx, keywords in keywords_dict.items():
+            for keyword in keywords:
+                if keyword in topic_lower:
+                    scores[idx] += 1
+
+        max_score = max(scores.values())
+        if max_score > 0:
+            for idx, score in scores.items():
+                if score == max_score:
+                    return idx
+        return default
+
+    genre_idx = find_best_match(genre_keywords, 0)
+    visual_idx = find_best_match(visual_keywords, 0)
+    music_idx = find_best_match(music_keywords, 0)
+
+    # 장르-스타일 연관성 보정
+    genre_visual_mapping = {
+        6: 7,   # Cyberpunk → Cyberpunk Neon
+        2: 8,   # Dark Fantasy → Dark Fantasy Gothic
+        12: 2,  # Anime/Animation → Anime/Manga
+        3: 8,   # Psychological Horror → Dark Fantasy Gothic
+        5: 10,  # Neo-Noir → Black & White Film Noir
+        22: 6,  # Historical Epic → Oil Painting Classical
+    }
+
+    genre_music_mapping = {
+        6: 15,  # Cyberpunk → Synthwave
+        12: 9,  # Anime/Animation → K-Pop or J-Pop related
+        22: 22, # Historical Epic → Orchestral/Cinematic
+        3: 14,  # Psychological Horror → Ambient
+        1: 3,   # Sci-Fi Epic → Electronic/EDM
+    }
+
+    # 스타일이 기본값이면 장르에 맞춰 보정
+    if visual_idx == 0 and genre_idx in genre_visual_mapping:
+        visual_idx = genre_visual_mapping[genre_idx]
+
+    if music_idx == 0 and genre_idx in genre_music_mapping:
+        music_idx = genre_music_mapping[genre_idx]
+
+    return genre_idx, visual_idx, music_idx
 
 # --- 비주얼 스타일 강조 (포토리얼리스틱 대폭 강화) ---
 def get_visual_style_emphasis(visual_style):
@@ -318,6 +447,15 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+    st.markdown("---")
+
+    # 자동 스타일 설정 (접을 수 있는 메뉴)
+    with st.expander("🔄 자동 스타일 설정", expanded=False):
+        st.caption("주제 자동생성 시 체크된 항목을 자동 설정합니다")
+        auto_genre_enabled = st.checkbox("🎬 영상 장르 자동", value=st.session_state.get('auto_genre_enabled', False), key='auto_genre_enabled')
+        auto_visual_enabled = st.checkbox("🎨 비주얼 스타일 자동", value=st.session_state.get('auto_visual_enabled', False), key='auto_visual_enabled')
+        auto_music_enabled = st.checkbox("🎵 음악 장르 자동", value=st.session_state.get('auto_music_enabled', False), key='auto_music_enabled')
+
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director Pro")
 st.caption("업계 최고 수준의 뮤직비디오 기획 시스템")
@@ -338,7 +476,13 @@ defaults = {
     'random_topic': "",
     'plan_data': None,
     'generated_images': {},
-    'turntable_images': {}
+    'turntable_images': {},
+    'auto_genre_enabled': False,
+    'auto_visual_enabled': False,
+    'auto_music_enabled': False,
+    'selected_genre_idx': 0,
+    'selected_visual_idx': 0,
+    'selected_music_idx': 0
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -349,20 +493,35 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     st.markdown("<div class='trend-box'>", unsafe_allow_html=True)
     st.markdown("### 🔥 바이럴 주제 생성기")
     
+    # 자동 스타일 설정 적용 함수
+    def apply_auto_style_settings(topic_text):
+        """체크된 항목에 대해 주제 기반 자동 스타일 설정 적용"""
+        if topic_text:
+            genre_idx, visual_idx, music_idx = analyze_topic_for_auto_settings(topic_text)
+            if st.session_state.get('auto_genre_enabled', False):
+                st.session_state.selected_genre_idx = genre_idx
+            if st.session_state.get('auto_visual_enabled', False):
+                st.session_state.selected_visual_idx = visual_idx
+            if st.session_state.get('auto_music_enabled', False):
+                st.session_state.selected_music_idx = music_idx
+
     col_t1, col_t2, col_t3 = st.columns(3)
     with col_t1:
         if st.button("🎲 랜덤 생성", use_container_width=True):
             st.session_state.random_topic = generate_trending_topic()
+            apply_auto_style_settings(st.session_state.random_topic)
             st.rerun()
     with col_t2:
         if st.button("🎲🎲 5개 생성", use_container_width=True):
             topics = [generate_trending_topic() for _ in range(5)]
             st.session_state.random_topic = "\n---\n".join(topics)
+            apply_auto_style_settings(topics[0])  # 첫 번째 주제 기준
             st.rerun()
     with col_t3:
         if st.button("🤖 AI 생성", use_container_width=True):
             if gemini_key:
                 st.session_state.random_topic = get_viral_topic_with_ai(gemini_key, gemini_model)
+                apply_auto_style_settings(st.session_state.random_topic)
                 st.rerun()
             else:
                 st.warning("API 키 필요")
@@ -370,7 +529,29 @@ with st.expander("📝 프로젝트 설정", expanded=True):
     if st.session_state.random_topic:
         st.info(f"💡 {st.session_state.random_topic}")
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
+    # 장르/스타일 랜덤 선택 버튼 (form 밖)
+    st.markdown("#### 🎲 장르/스타일 랜덤 선택")
+    col_r1, col_r2, col_r3, col_r4 = st.columns([1, 1, 1, 1])
+    with col_r1:
+        if st.button("🎬 영상장르", use_container_width=True, key="rand_genre"):
+            st.session_state.selected_genre_idx = random.randint(0, len(VIDEO_GENRES) - 1)
+            st.rerun()
+    with col_r2:
+        if st.button("🎨 비주얼", use_container_width=True, key="rand_visual"):
+            st.session_state.selected_visual_idx = random.randint(0, len(VISUAL_STYLES) - 1)
+            st.rerun()
+    with col_r3:
+        if st.button("🎵 음악장르", use_container_width=True, key="rand_music"):
+            st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
+            st.rerun()
+    with col_r4:
+        if st.button("🎲 전체 랜덤", use_container_width=True, key="rand_all"):
+            st.session_state.selected_genre_idx = random.randint(0, len(VIDEO_GENRES) - 1)
+            st.session_state.selected_visual_idx = random.randint(0, len(VISUAL_STYLES) - 1)
+            st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
+            st.rerun()
+
     with st.form("project_form"):
         topic = st.text_area("🎯 영상 주제/컨셉", height=120, 
                             value=st.session_state.random_topic if st.session_state.random_topic else "",
@@ -384,18 +565,21 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             use_json_profiles = st.checkbox("🎯 JSON 프로필 (극도 디테일)", value=True)
         with col_opt2:
             expert_mode = st.checkbox("🏆 전문가 모드 (심층 분석)", value=True)
-        
+
         st.markdown("---")
-        
-        # 장르/스타일 선택
+
+        # 장르/스타일 선택 (session_state 인덱스 사용)
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
-            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES, index=0)
+            selected_genre = st.selectbox("🎬 영상 장르", VIDEO_GENRES,
+                index=st.session_state.selected_genre_idx)
         with col_g2:
-            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES, index=0)
+            selected_visual = st.selectbox("🎨 비주얼 스타일", VISUAL_STYLES,
+                index=st.session_state.selected_visual_idx)
         with col_g3:
-            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES, index=0)
-        
+            selected_music = st.selectbox("🎵 음악 장르", MUSIC_GENRES,
+                index=st.session_state.selected_music_idx)
+
         st.markdown("---")
         
         # 비율 및 런닝타임
@@ -1290,22 +1474,25 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
 def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
     models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-    
-    for model_name in models_to_try:
+    last_error = None
+
+    for model in models_to_try:
         try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
-            return response.text, model_name
+            gen_model = genai.GenerativeModel(model)
+            response = gen_model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
+            return response.text, model
         except Exception as e:
+            last_error = f"{model}: {str(e)}"
             time.sleep(1)
-    raise Exception("All models failed")
+    raise Exception(f"All models failed. Last error: {last_error}")
 
 def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
+    response_text = None
     for attempt in range(3):
         try:
             prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
-            
+
             cleaned = clean_json_text(response_text)
             plan_data = json.loads(cleaned)
             st.toast(f"✅ 생성 완료 ({used_model})")
@@ -1316,12 +1503,13 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
-                with st.expander("🔍 생성된 원본 응답 확인"):
-                    st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
+                if response_text:
+                    with st.expander("🔍 생성된 원본 응답 확인"):
+                        st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
                 return None
         except Exception as e:
             if attempt < 2:
-                st.warning(f"재시도 중... ({attempt+1}/3)")
+                st.warning(f"재시도 중... ({attempt+1}/3) - {str(e)[:100]}")
                 time.sleep(2)
             else:
                 st.error(f"생성 실패: {e}")
@@ -1341,7 +1529,7 @@ if submit_btn:
             'use_emotional': use_emotional, 'use_climax': use_climax,
             'use_symbolic': use_symbolic, 'use_twist': use_twist
         }
-        
+
         if execution_mode == "API 자동 실행":
             if not gemini_key:
                 st.warning("⚠️ API Key가 필요합니다")

@@ -204,51 +204,65 @@ def get_api_key(key_name):
 # --- 프로젝트 저장/불러오기 (JSONBin) ---
 JSONBIN_API_URL = "https://api.jsonbin.io/v3"
 
-def save_to_jsonbin(data, api_key, bin_name=None):
-    """JSONBin에 프로젝트 저장"""
-    headers = {
-        "Content-Type": "application/json",
-        "X-Master-Key": api_key
-    }
-    if bin_name:
-        headers["X-Bin-Name"] = bin_name
-
-    try:
-        response = requests.post(f"{JSONBIN_API_URL}/b", json=data, headers=headers, timeout=30)
-        if response.status_code == 200:
-            result = response.json()
-            return result.get("metadata", {}).get("id"), None
-        else:
-            return None, f"저장 실패: {response.status_code} - {response.text[:100]}"
-    except Exception as e:
-        return None, f"저장 오류: {str(e)}"
-
-def load_from_jsonbin(bin_id, api_key):
-    """JSONBin에서 프로젝트 불러오기"""
+def load_project_list_from_jsonbin(bin_id, api_key):
+    """JSONBin에서 프로젝트 리스트 불러오기"""
     headers = {"X-Master-Key": api_key}
 
     try:
         response = requests.get(f"{JSONBIN_API_URL}/b/{bin_id}/latest", headers=headers, timeout=30)
         if response.status_code == 200:
             result = response.json()
-            return result.get("record"), None
+            record = result.get("record", {})
+            projects = record.get("projects", [])
+            return projects, None
         else:
-            return None, f"불러오기 실패: {response.status_code}"
+            return [], f"불러오기 실패: {response.status_code}"
     except Exception as e:
-        return None, f"불러오기 오류: {str(e)}"
+        return [], f"불러오기 오류: {str(e)}"
 
-def list_jsonbin_bins(api_key):
-    """JSONBin에서 저장된 프로젝트 목록 조회"""
-    headers = {"X-Master-Key": api_key}
+def save_project_list_to_jsonbin(projects, bin_id, api_key):
+    """JSONBin에 프로젝트 리스트 저장 (기존 bin 업데이트)"""
+    headers = {
+        "Content-Type": "application/json",
+        "X-Master-Key": api_key
+    }
+
+    data = {"projects": projects}
 
     try:
-        response = requests.get(f"{JSONBIN_API_URL}/c/uncategorized/bins", headers=headers, timeout=30)
+        response = requests.put(f"{JSONBIN_API_URL}/b/{bin_id}", json=data, headers=headers, timeout=30)
         if response.status_code == 200:
-            return response.json(), None
+            return True, None
         else:
-            return [], f"목록 조회 실패: {response.status_code}"
+            return False, f"저장 실패: {response.status_code} - {response.text[:100]}"
     except Exception as e:
-        return [], f"목록 조회 오류: {str(e)}"
+        return False, f"저장 오류: {str(e)}"
+
+def add_project_to_list(new_project, projects, max_projects=50):
+    """프로젝트 리스트에 새 프로젝트 추가 (최대 개수 제한)"""
+    # 같은 제목이 있으면 업데이트
+    project_title = new_project.get('plan_data', {}).get('project_title', 'Untitled')
+    updated = False
+    for i, p in enumerate(projects):
+        if p.get('plan_data', {}).get('project_title') == project_title:
+            projects[i] = new_project
+            updated = True
+            break
+
+    if not updated:
+        projects.insert(0, new_project)  # 최신 항목을 맨 앞에
+
+    # 최대 개수 제한
+    if len(projects) > max_projects:
+        projects = projects[:max_projects]
+
+    return projects
+
+def delete_project_from_list(project_index, projects):
+    """프로젝트 리스트에서 삭제"""
+    if 0 <= project_index < len(projects):
+        del projects[project_index]
+    return projects
 
 def prepare_project_for_save(plan_data, topic="", settings=None):
     """프로젝트 데이터를 저장용으로 준비 (이미지 제외)"""
@@ -483,13 +497,11 @@ with st.sidebar:
             st.success("✅ Gemini Key 연결됨")
         else:
             gemini_key = st.text_input("Gemini API Key", type="password")
-        
-        # Segmind Key (추가됨)
+
+        # Segmind Key (Secrets에서만 가져옴)
         segmind_key = get_api_key("SEGMIND_API_KEY")
         if segmind_key:
             st.success("✅ Segmind Key 연결됨")
-        else:
-            segmind_key = st.text_input("Segmind API Key (선택)", type="password")
 
         # 최신 Gemini API 모델 (2025)
         model_options = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
@@ -524,21 +536,31 @@ with st.sidebar:
 
     # 프로젝트 저장/불러오기
     with st.expander("💾 프로젝트 관리", expanded=False):
-        save_method = st.radio("저장 방식", ["로컬 파일", "클라우드 (JSONBin)"], horizontal=True, key="save_method")
+        # Secrets에서 JSONBin 설정 가져오기
+        jsonbin_key = get_api_key("JSONBIN_API_KEY")
+        jsonbin_bin_id = get_api_key("JSONBIN_BIN_ID")
 
-        if save_method == "클라우드 (JSONBin)":
-            jsonbin_key = get_api_key("JSONBIN_API_KEY")
-            if not jsonbin_key:
-                jsonbin_key = st.text_input("JSONBin API Key", type="password", key="jsonbin_key_input",
-                    help="https://jsonbin.io 에서 무료 API 키 발급")
+        if jsonbin_key and jsonbin_bin_id:
+            st.success("✅ 클라우드 저장소 연결됨")
 
-            if jsonbin_key:
-                st.success("✅ JSONBin 연결됨")
+            # 클라우드에서 프로젝트 리스트 불러오기
+            if 'cloud_projects' not in st.session_state:
+                st.session_state.cloud_projects = []
 
-                # 클라우드 저장
-                if st.button("☁️ 클라우드에 저장", use_container_width=True, key="save_cloud"):
+            col_refresh, col_save = st.columns(2)
+            with col_refresh:
+                if st.button("🔄 목록 새로고침", use_container_width=True, key="refresh_projects"):
+                    projects, error = load_project_list_from_jsonbin(jsonbin_bin_id, jsonbin_key)
+                    if error:
+                        st.error(error)
+                    else:
+                        st.session_state.cloud_projects = projects
+                        st.success(f"✅ {len(projects)}개 프로젝트 로드")
+                        st.rerun()
+
+            with col_save:
+                if st.button("☁️ 현재 프로젝트 저장", use_container_width=True, key="save_cloud"):
                     if st.session_state.get('plan_data'):
-                        project_name = st.session_state['plan_data'].get('project_title', 'Untitled')
                         save_data = prepare_project_for_save(
                             st.session_state['plan_data'],
                             st.session_state.get('random_topic', ''),
@@ -547,75 +569,95 @@ with st.sidebar:
                                 'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
                             }
                         )
-                        bin_id, error = save_to_jsonbin(save_data, jsonbin_key, project_name)
-                        if bin_id:
-                            st.success(f"✅ 저장 완료!")
-                            st.code(bin_id, language=None)
-                            st.caption("위 ID를 저장해두세요")
+                        # 기존 리스트에 추가
+                        updated_list = add_project_to_list(save_data, st.session_state.cloud_projects.copy())
+                        success, error = save_project_list_to_jsonbin(updated_list, jsonbin_bin_id, jsonbin_key)
+                        if success:
+                            st.session_state.cloud_projects = updated_list
+                            st.success("✅ 저장 완료!")
                         else:
                             st.error(error)
                     else:
                         st.warning("저장할 프로젝트가 없습니다")
 
-                # 클라우드에서 불러오기
+            # 저장된 프로젝트 목록 표시
+            if st.session_state.cloud_projects:
                 st.markdown("---")
-                load_bin_id = st.text_input("프로젝트 ID 입력", key="load_bin_id", placeholder="저장 시 받은 ID")
-                if st.button("☁️ 클라우드에서 불러오기", use_container_width=True, key="load_cloud"):
-                    if load_bin_id:
-                        data, error = load_from_jsonbin(load_bin_id, jsonbin_key)
-                        if data:
-                            st.session_state['plan_data'] = data.get('plan_data')
-                            st.session_state['random_topic'] = data.get('topic', '')
-                            if data.get('settings'):
-                                st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
-                                st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
-                            st.success("✅ 불러오기 완료!")
-                            st.rerun()
-                        else:
-                            st.error(error)
-                    else:
-                        st.warning("프로젝트 ID를 입력하세요")
-        else:
-            # 로컬 파일 저장
-            if st.session_state.get('plan_data'):
-                project_json = export_project_json(
-                    st.session_state['plan_data'],
-                    st.session_state.get('random_topic', ''),
-                    {
-                        'scene_count': st.session_state.get('scene_count', 8),
-                        'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
-                    }
-                )
-                project_name = st.session_state['plan_data'].get('project_title', 'project')
-                safe_name = re.sub(r'[^\w\s-]', '', project_name).strip().replace(' ', '_')
+                st.caption(f"📁 저장된 프로젝트 ({len(st.session_state.cloud_projects)}개)")
 
-                st.download_button(
-                    label="💾 프로젝트 다운로드 (.json)",
-                    data=project_json,
-                    file_name=f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            else:
-                st.caption("저장할 프로젝트가 없습니다")
+                project_options = []
+                for i, p in enumerate(st.session_state.cloud_projects):
+                    title = p.get('plan_data', {}).get('project_title', f'프로젝트 {i+1}')
+                    saved_at = p.get('saved_at', '')[:10]  # 날짜만
+                    project_options.append(f"{title} ({saved_at})")
 
-            # 로컬 파일 불러오기
-            st.markdown("---")
-            uploaded_file = st.file_uploader("프로젝트 파일 불러오기", type=['json'], key="upload_project")
-            if uploaded_file:
-                try:
-                    content = uploaded_file.read().decode('utf-8')
-                    data = json.loads(content)
-                    if st.button("📂 불러오기 적용", use_container_width=True):
-                        st.session_state['plan_data'] = data.get('plan_data', data)
+                selected_idx = st.selectbox("프로젝트 선택", range(len(project_options)),
+                    format_func=lambda x: project_options[x], key="select_project")
+
+                col_load, col_delete = st.columns(2)
+                with col_load:
+                    if st.button("📂 불러오기", use_container_width=True, key="load_project"):
+                        data = st.session_state.cloud_projects[selected_idx]
+                        st.session_state['plan_data'] = data.get('plan_data')
                         st.session_state['random_topic'] = data.get('topic', '')
                         if data.get('settings'):
                             st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
                             st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
                         st.success("✅ 불러오기 완료!")
                         st.rerun()
-                except Exception as e:
-                    st.error(f"파일 읽기 오류: {e}")
+
+                with col_delete:
+                    if st.button("🗑️ 삭제", use_container_width=True, key="delete_project"):
+                        updated_list = delete_project_from_list(selected_idx, st.session_state.cloud_projects.copy())
+                        success, error = save_project_list_to_jsonbin(updated_list, jsonbin_bin_id, jsonbin_key)
+                        if success:
+                            st.session_state.cloud_projects = updated_list
+                            st.success("✅ 삭제 완료!")
+                            st.rerun()
+                        else:
+                            st.error(error)
+        else:
+            st.caption("⚠️ Secrets에 JSONBIN_API_KEY, JSONBIN_BIN_ID 설정 필요")
+
+        # 로컬 파일 저장/불러오기 (항상 표시)
+        st.markdown("---")
+        st.caption("📁 로컬 파일")
+
+        if st.session_state.get('plan_data'):
+            project_json = export_project_json(
+                st.session_state['plan_data'],
+                st.session_state.get('random_topic', ''),
+                {
+                    'scene_count': st.session_state.get('scene_count', 8),
+                    'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
+                }
+            )
+            project_name = st.session_state['plan_data'].get('project_title', 'project')
+            safe_name = re.sub(r'[^\w\s-]', '', project_name).strip().replace(' ', '_')
+
+            st.download_button(
+                label="💾 다운로드 (.json)",
+                data=project_json,
+                file_name=f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+        uploaded_file = st.file_uploader("파일 불러오기", type=['json'], key="upload_project")
+        if uploaded_file:
+            try:
+                content = uploaded_file.read().decode('utf-8')
+                data = json.loads(content)
+                if st.button("📂 파일 적용", use_container_width=True):
+                    st.session_state['plan_data'] = data.get('plan_data', data)
+                    st.session_state['random_topic'] = data.get('topic', '')
+                    if data.get('settings'):
+                        st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
+                        st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
+                    st.success("✅ 불러오기 완료!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"파일 읽기 오류: {e}")
 
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director Pro")
@@ -821,44 +863,68 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         submit_btn = st.form_submit_button("🚀 프로젝트 생성", use_container_width=True, type="primary")
 
 # ------------------------------------------------------------------
-# JSON 정리 함수
+# JSON 정리 함수 (개선됨)
 # ------------------------------------------------------------------
 def clean_json_text(text):
+    if not text:
+        return ""
+
+    original_text = text
+
+    # 1. ```json ... ``` 블록에서 추출
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         text = match.group(1)
     else:
+        # 2. ``` ... ``` 블록에서 추출
         match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
         if match:
             text = match.group(1)
-    
+        else:
+            # 3. { 로 시작하고 } 로 끝나는 JSON 객체 찾기
+            match = re.search(r'(\{[\s\S]*\})', text)
+            if match:
+                text = match.group(1)
+
     text = text.strip()
+
+    # JSON이 비어있으면 원본에서 다시 시도
+    if not text or text == "":
+        # 원본에서 첫 번째 { 부터 마지막 } 까지 추출
+        start_idx = original_text.find('{')
+        end_idx = original_text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = original_text[start_idx:end_idx + 1]
+
+    # JSON 정리
     text = re.sub(r',\s*}', '}', text)
     text = re.sub(r',\s*]', ']', text)
     text = re.sub(r'//.*?\n', '\n', text)
-    
+    # 여러 줄 주석 제거
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+
     # JSON 문자열 내의 제어 문자 이스케이프 처리
     def escape_control_chars_in_strings(json_str):
         result = []
         in_string = False
         escape_next = False
-        
+
         for char in json_str:
             if escape_next:
                 result.append(char)
                 escape_next = False
                 continue
-            
+
             if char == '\\':
                 result.append(char)
                 escape_next = True
                 continue
-            
+
             if char == '"':
                 in_string = not in_string
                 result.append(char)
                 continue
-            
+
             if in_string:
                 if char == '\n':
                     result.append('\\n')
@@ -872,9 +938,9 @@ def clean_json_text(text):
                     result.append(char)
             else:
                 result.append(char)
-        
+
         return ''.join(result)
-    
+
     text = escape_control_chars_in_strings(text)
     return text
 

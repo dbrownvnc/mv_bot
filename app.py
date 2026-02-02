@@ -503,9 +503,10 @@ with st.sidebar:
         if segmind_key:
             st.success("✅ Segmind Key 연결됨")
 
-        # 최신 Gemini API 모델 (2025)
-        model_options = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
+        # Gemini API 모델 선택
+        model_options = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-exp-1206"]
         gemini_model = st.selectbox("모델", model_options, index=0)
+        st.caption("사용 가능한 모델 자동 감지")
     
     st.markdown("---")
     st.subheader("🎨 이미지 생성")
@@ -1772,18 +1773,50 @@ def generate_all_preview_images(plan_data, img_width, img_height, provider, use_
 # ------------------------------------------------------------------
 # API 생성
 # ------------------------------------------------------------------
+def get_available_models(api_key):
+    """API에서 사용 가능한 generateContent 지원 모델 목록 가져오기"""
+    try:
+        genai.configure(api_key=api_key)
+        available = []
+        for m in genai.list_models():
+            if 'generateContent' in [method.name for method in m.supported_generation_methods]:
+                available.append(m.name.replace('models/', ''))
+        return available
+    except:
+        return []
+
 def generate_with_fallback(prompt, api_key, model_name):
     genai.configure(api_key=api_key)
-    # Gemini API 모델 - 안정적인 버전 사용
-    models_to_try = [
-        model_name,
-        "gemini-1.5-flash-latest",   # 안정적인 빠른 모델
-        "gemini-1.5-pro-latest",     # 안정적인 고성능 모델
-        "gemini-pro",                # 레거시 안정 모델
-    ]
+
+    # 사용 가능한 모델 목록 가져오기
+    available_models = get_available_models(api_key)
+
+    if available_models:
+        # 선호 순서 (사용 가능한 모델 중에서만)
+        preferred_order = [
+            model_name,
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro",
+            "gemini-1.5-pro-latest",
+            "gemini-exp-1206",
+        ]
+        # 사용 가능한 모델만 필터링
+        models_to_try = [m for m in preferred_order if m in available_models]
+        # 없으면 사용 가능한 모델 중 첫 번째 사용
+        if not models_to_try and available_models:
+            models_to_try = available_models[:3]
+    else:
+        # 폴백: 기본 모델 리스트
+        models_to_try = [model_name, "gemini-2.0-flash-exp", "gemini-1.5-flash"]
+
     # 중복 제거
     models_to_try = list(dict.fromkeys(models_to_try))
     last_error = None
+
+    st.toast(f"🔍 사용 가능한 모델: {', '.join(models_to_try[:3])}")
 
     for model in models_to_try:
         try:

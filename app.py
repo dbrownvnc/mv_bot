@@ -503,8 +503,8 @@ with st.sidebar:
         if segmind_key:
             st.success("✅ Segmind Key 연결됨")
 
-        # Gemini API 모델 선택 (2025 공식 문서 기준)
-        model_options = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
+        # Gemini API 모델 선택
+        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
@@ -1773,69 +1773,28 @@ def generate_all_preview_images(plan_data, img_width, img_height, provider, use_
 # API 생성
 # ------------------------------------------------------------------
 def generate_with_fallback(prompt, api_key, model_name):
+    """원본 작동 버전 기반 - 단순화"""
     genai.configure(api_key=api_key)
-
-    # 2025년 Gemini API 모델 (공식 문서 기준)
-    # https://ai.google.dev/gemini-api/docs/models
-    models_to_try = [
-        model_name,
-        "gemini-2.5-flash",      # 최신 빠른 모델
-        "gemini-2.5-pro",        # 최신 고성능 모델
-        "gemini-2.0-flash",      # 안정적인 모델
-    ]
-
-    # 중복 제거
-    models_to_try = list(dict.fromkeys(models_to_try))
-    last_error = None
+    models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
     for model in models_to_try:
         try:
             gen_model = genai.GenerativeModel(model)
             response = gen_model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
-
-            # 응답 텍스트 추출 (여러 방법 시도)
-            text = None
-            if hasattr(response, 'text') and response.text:
-                text = response.text
-            elif hasattr(response, 'parts') and response.parts:
-                text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
-            elif hasattr(response, 'candidates') and response.candidates:
-                for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and candidate.content:
-                        if hasattr(candidate.content, 'parts'):
-                            text = ''.join(part.text for part in candidate.content.parts if hasattr(part, 'text'))
-                            break
-
-            if text and len(text.strip()) > 0:
-                return text, model
-            else:
-                raise Exception("응답이 비어있음")
-
+            return response.text, model
         except Exception as e:
-            last_error = f"{model}: {str(e)}"
-            st.toast(f"⚠️ {model} 실패, 다음 모델 시도 중...")
+            st.toast(f"⚠️ {model} 실패: {str(e)[:30]}...")
             time.sleep(1)
-    raise Exception(f"All models failed. Last error: {last_error}")
+    raise Exception("All models failed")
 
 def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
-    response_text = None
+    """원본 작동 버전 기반"""
     for attempt in range(3):
         try:
             prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
             response_text, used_model = generate_with_fallback(prompt, api_key, model_name)
 
-            # 응답 검증
-            if not response_text or len(response_text.strip()) == 0:
-                raise Exception("API 응답이 비어있습니다")
-
-            st.info(f"📥 {used_model}에서 {len(response_text)}자 응답 수신")
-
             cleaned = clean_json_text(response_text)
-
-            # 정리된 텍스트 검증
-            if not cleaned or len(cleaned.strip()) == 0:
-                raise Exception("JSON 추출 실패 - 응답에서 JSON을 찾을 수 없습니다")
-
             plan_data = json.loads(cleaned)
             st.toast(f"✅ 생성 완료 ({used_model})")
             return plan_data
@@ -1845,12 +1804,8 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
-                if response_text:
-                    st.error(f"응답 길이: {len(response_text)}자")
-                    with st.expander("🔍 생성된 원본 응답 확인 (처음 3000자)"):
-                        st.code(response_text[:3000] if len(response_text) > 3000 else response_text)
-                else:
-                    st.error("응답이 비어있습니다 - API 키 또는 모델을 확인하세요")
+                with st.expander("🔍 생성된 원본 응답 확인"):
+                    st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
                 return None
         except Exception as e:
             if attempt < 2:

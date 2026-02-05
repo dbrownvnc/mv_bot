@@ -671,18 +671,19 @@ with st.sidebar:
         st.caption("원클릭 자동 키워드 발굴 & 기획")
 
         channel_categories = [
-            "뮤직비디오/음악", "자기계발/동기부여", "재테크/경제", "IT/테크",
-            "뷰티/패션", "여행/브이로그", "게임", "푸드/쿡방",
-            "교육/강의", "엔터테인먼트", "스포츠/피트니스", "라이프스타일"
+            "뮤직비디오", "단편영화", "장편영화", "실험영화/아트필름",
+            "상업광고/CF", "브랜드필름", "패션필름", "애니메이션",
+            "다큐멘터리", "시네마틱 브이로그", "콘서트/공연영상", "트레일러/티저",
+            "모션그래픽", "VFX/시각효과", "드라마/웹드라마"
         ]
 
         if 'channel_category' not in st.session_state:
-            st.session_state.channel_category = "뮤직비디오/음악"
+            st.session_state.channel_category = "뮤직비디오"
 
         channel_category = st.selectbox(
-            "📺 채널 카테고리",
+            "🎬 영상 카테고리",
             channel_categories,
-            index=channel_categories.index(st.session_state.get('channel_category', "뮤직비디오/음악")),
+            index=channel_categories.index(st.session_state.get('channel_category', "뮤직비디오")),
             key="channel_cat_select"
         )
         st.session_state.channel_category = channel_category
@@ -843,7 +844,7 @@ defaults = {
     'selected_genre_idx': 0,
     'selected_visual_idx': 0,
     'selected_music_idx': 0,
-    'channel_category': '뮤직비디오/음악',
+    'channel_category': '뮤직비디오',
     'scouted_keywords': [],
     'auto_scout_enabled': True
 }

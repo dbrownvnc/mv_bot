@@ -211,6 +211,119 @@ SEASONAL_KEYWORDS = {
     12: ["크리스마스", "연말", "겨울", "눈", "회고", "송년", "파티", "선물"]
 }
 
+# 영상 카테고리별 전문 키워드 & 특성
+CATEGORY_PROFILES = {
+    "뮤직비디오": {
+        "keywords": ["퍼포먼스", "안무", "립싱크", "원테이크", "컬러그레이딩", "아티스트", "앨범", "컴백",
+                    "비주얼", "세트", "로케이션", "스토리텔링", "감성", "에너지", "바이브"],
+        "themes": ["사랑", "이별", "자유", "반항", "꿈", "열정", "고독", "희망", "파티", "밤"],
+        "visual_refs": ["Hype Williams", "Dave Meyers", "Joseph Kahn", "Michel Gondry", "Spike Jonze"],
+        "style_guide": "강렬한 비주얼, 아티스트 중심, 음악과 싱크, 감정 극대화"
+    },
+    "단편영화": {
+        "keywords": ["내러티브", "캐릭터", "플롯", "트위스트", "대사", "연기", "촬영", "조명",
+                    "사운드디자인", "편집", "컷", "시퀀스", "클라이맥스", "엔딩"],
+        "themes": ["인간관계", "성장", "상실", "발견", "갈등", "화해", "비밀", "운명", "선택"],
+        "visual_refs": ["Sundance", "Cannes Short", "Korean Short Film", "A24 style"],
+        "style_guide": "15분 이내, 명확한 서사 구조, 강렬한 엔딩, 캐릭터 아크"
+    },
+    "장편영화": {
+        "keywords": ["3막구조", "캐릭터아크", "서브플롯", "장르", "톤", "페이싱", "시네마토그래피",
+                    "프로덕션디자인", "캐스팅", "스코어", "VFX", "로케이션"],
+        "themes": ["영웅의여정", "복수", "사랑", "생존", "정의", "가족", "전쟁", "모험", "미스터리"],
+        "visual_refs": ["Christopher Nolan", "Denis Villeneuve", "Bong Joon-ho", "Park Chan-wook"],
+        "style_guide": "90분 이상, 복잡한 캐릭터, 다층적 스토리, 영화적 스케일"
+    },
+    "실험영화/아트필름": {
+        "keywords": ["추상", "비선형", "시적", "상징", "메타포", "텍스처", "사운드스케이프",
+                    "슬로우시네마", "미니멀", "초현실", "꿈", "무의식", "시간"],
+        "themes": ["존재", "시간", "공간", "기억", "정체성", "죽음", "탄생", "순환", "카오스"],
+        "visual_refs": ["Terrence Malick", "Tarkovsky", "David Lynch", "Maya Deren", "Stan Brakhage"],
+        "style_guide": "실험적 형식, 비선형 내러티브, 시각적 시, 감각적 경험"
+    },
+    "상업광고/CF": {
+        "keywords": ["브랜드", "제품", "USP", "타겟", "CTA", "후킹", "15초", "30초",
+                    "슬로건", "로고", "팩샷", "모델", "라이프스타일"],
+        "themes": ["욕망", "해결책", "변화", "행복", "성공", "젊음", "트렌드", "프리미엄"],
+        "visual_refs": ["Apple", "Nike", "Samsung", "Coca-Cola style"],
+        "style_guide": "짧고 임팩트있게, 브랜드 메시지 명확, 감정 자극, 기억에 남는 비주얼"
+    },
+    "브랜드필름": {
+        "keywords": ["브랜드스토리", "가치", "미션", "비전", "헤리티지", "장인정신",
+                    "인터뷰", "비하인드", "프로세스", "철학", "커뮤니티"],
+        "themes": ["진정성", "장인정신", "혁신", "전통", "미래", "사람", "열정", "품질"],
+        "visual_refs": ["Patagonia", "Apple Behind the Mac", "Nike Origin stories"],
+        "style_guide": "2-5분, 브랜드 철학 전달, 감성적 연결, 다큐멘터리 터치"
+    },
+    "패션필름": {
+        "keywords": ["룩북", "컬렉션", "런웨이", "에디토리얼", "모델", "스타일링", "무드",
+                    "시즌", "트렌드", "하이패션", "스트릿", "꾸뛰르"],
+        "themes": ["아름다움", "욕망", "정체성", "변신", "시대정신", "반항", "우아함"],
+        "visual_refs": ["Nick Knight", "Steven Meisel", "Helmut Newton", "Guy Bourdin"],
+        "style_guide": "비주얼 중심, 옷이 주인공, 무드와 분위기, 아트디렉션 중요"
+    },
+    "애니메이션": {
+        "keywords": ["캐릭터디자인", "스토리보드", "애니메틱", "키프레임", "인비트윈",
+                    "2D", "3D", "스톱모션", "로토스코핑", "셀애니", "모션캡처"],
+        "themes": ["성장", "모험", "우정", "가족", "판타지", "SF", "코미디", "액션"],
+        "visual_refs": ["Pixar", "Studio Ghibli", "Spider-Verse", "Arcane", "Makoto Shinkai"],
+        "style_guide": "캐릭터 매력, 세계관 구축, 움직임의 미학, 컬러 팔레트"
+    },
+    "다큐멘터리": {
+        "keywords": ["인터뷰", "아카이브", "보이스오버", "현장", "리서치", "팩트",
+                    "주제", "시점", "증언", "기록", "관찰", "탐사"],
+        "themes": ["진실", "사회", "환경", "인물", "역사", "문화", "과학", "예술"],
+        "visual_refs": ["Ken Burns", "Werner Herzog", "Netflix Documentary style"],
+        "style_guide": "사실 기반, 깊이있는 리서치, 인간적 스토리, 사회적 임팩트"
+    },
+    "시네마틱 브이로그": {
+        "keywords": ["일상", "여행", "라이프스타일", "ASMR", "POV", "타임랩스",
+                    "드론", "짐벌", "컬러그레이딩", "음악선곡", "보이스오버"],
+        "themes": ["일상의발견", "여행", "도전", "성장", "힐링", "영감", "루틴"],
+        "visual_refs": ["Sam Kolder", "Peter McKinnon", "Casey Neistat", "Korean vlog style"],
+        "style_guide": "개인 시점, 영화적 촬영, 감성 편집, 음악과 조화"
+    },
+    "콘서트/공연영상": {
+        "keywords": ["멀티캠", "라이브", "무대", "조명", "음향", "관객", "앙코르",
+                    "백스테이지", "리허설", "셋리스트", "퍼포먼스"],
+        "themes": ["에너지", "열정", "교감", "감동", "축제", "음악의힘"],
+        "visual_refs": ["Beyoncé Homecoming", "BTS concert films", "Coldplay live"],
+        "style_guide": "다이나믹한 카메라워크, 아티스트와 관객 교감, 음악 중심"
+    },
+    "트레일러/티저": {
+        "keywords": ["후킹", "빌드업", "클라이맥스", "컷", "사운드디자인", "타이틀",
+                    "릴리즈데이트", "미스터리", "서스펜스", "하이라이트"],
+        "themes": ["기대감", "궁금증", "스케일", "충격", "감동예고"],
+        "visual_refs": ["Marvel trailers", "A24 trailers", "Nolan film trailers"],
+        "style_guide": "30초-2분, 핵심만 보여주기, 궁금증 유발, 강렬한 마무리"
+    },
+    "모션그래픽": {
+        "keywords": ["타이포", "인포그래픽", "로고애니메이션", "트랜지션", "이펙트",
+                    "일러스트", "아이콘", "데이터비주얼", "키네틱타이포"],
+        "themes": ["정보전달", "브랜딩", "설명", "강조", "시각화"],
+        "visual_refs": ["Buck Design", "Pentagram", "ManvsMachine", "Ordinary Folk"],
+        "style_guide": "깔끔한 디자인, 명확한 정보 전달, 트렌디한 움직임"
+    },
+    "VFX/시각효과": {
+        "keywords": ["CGI", "합성", "매트페인팅", "파티클", "시뮬레이션", "트래킹",
+                    "로토", "키잉", "3D모델링", "렌더링", "디스트럭션"],
+        "themes": ["불가능을가능하게", "스펙터클", "초현실", "SF", "판타지", "재난"],
+        "visual_refs": ["ILM", "Weta", "Marvel VFX", "Blade Runner 2049"],
+        "style_guide": "시각적 스펙터클, 현실과 CG의 조화, 기술적 완성도"
+    },
+    "드라마/웹드라마": {
+        "keywords": ["에피소드", "시리즈", "캐릭터아크", "클리프행어", "시즌",
+                    "파일럿", "앙상블", "서브플롯", "빌런", "로맨스라인"],
+        "themes": ["사랑", "복수", "성장", "가족", "직장", "학교", "범죄", "판타지"],
+        "visual_refs": ["Netflix K-drama", "HBO style", "웹드라마 vertical format"],
+        "style_guide": "에피소드 구조, 캐릭터 중심, 다음화 기대감, 시리즈 아크"
+    }
+}
+
+def get_category_profile(category):
+    """카테고리별 프로필 반환"""
+    return CATEGORY_PROFILES.get(category, CATEGORY_PROFILES["뮤직비디오"])
+
 def get_seasonal_keywords():
     """현재 월에 맞는 시즌 키워드 반환"""
     current_month = datetime.now().month
@@ -245,24 +358,34 @@ def generate_trending_keywords_fallback():
     return random.sample(base_trends, 5) + random.sample(seasonal, min(3, len(seasonal)))
 
 def filter_keywords_for_channel(keywords, channel_category, api_key, model_name):
-    """LLM으로 채널 카테고리에 맞는 키워드만 필터링"""
+    """LLM으로 채널 카테고리에 맞는 키워드만 필터링 (강화된 버전)"""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
 
-        prompt = f"""너는 '{channel_category}' 분야 뮤직비디오/영상 콘텐츠 기획자야.
-다음 트렌드 키워드 리스트에서 '{channel_category}' 콘텐츠와 연결할 수 있는 키워드만 골라줘.
-연결이 어려운 키워드는 버리고, 연결 가능한 키워드는 어떻게 활용할 수 있는지 간단히 설명해.
+        profile = get_category_profile(channel_category)
 
-키워드 리스트: {keywords}
+        prompt = f"""너는 '{channel_category}' 분야 전문 영상 기획자야.
 
-JSON 형식으로 답변해줘:
+## 카테고리 특성
+- 핵심 키워드: {', '.join(profile['keywords'][:8])}
+- 주요 테마: {', '.join(profile['themes'][:6])}
+- 스타일 가이드: {profile['style_guide']}
+
+## 작업
+다음 트렌드 키워드에서 '{channel_category}' 영상 콘텐츠로 연결할 수 있는 것만 선택해.
+각 키워드를 '{channel_category}'의 특성에 맞게 어떻게 활용할 수 있는지 구체적으로 제안해.
+
+트렌드 키워드: {keywords}
+
+## 출력 형식 (JSON)
 {{
     "filtered_keywords": [
-        {{"keyword": "키워드1", "angle": "활용 각도/아이디어"}},
-        {{"keyword": "키워드2", "angle": "활용 각도/아이디어"}}
+        {{"keyword": "선택한키워드", "angle": "{channel_category}에서의 구체적 활용법", "concept_hint": "영상 콘셉트 힌트"}}
     ]
-}}"""
+}}
+
+반드시 {channel_category}과 연결 가능한 키워드만 선택하고, 억지 연결은 하지 마."""
 
         response = model.generate_content(prompt)
         text = response.text
@@ -275,11 +398,13 @@ JSON 형식으로 답변해줘:
         return []
     except Exception as e:
         st.warning(f"키워드 필터링 실패: {str(e)[:50]}")
-        return [{"keyword": kw, "angle": "자동 생성"} for kw in keywords[:5]]
+        return [{"keyword": kw, "angle": "자동 생성", "concept_hint": ""} for kw in keywords[:5]]
 
 def auto_scout_trending_topics(channel_category, api_key, model_name):
-    """완전 자동 트렌드 스카우팅"""
+    """완전 자동 트렌드 스카우팅 (강화된 버전)"""
     st.info("📡 트렌드 레이더 가동 중...")
+
+    profile = get_category_profile(channel_category)
 
     # 1. 구글 트렌드에서 키워드 수집
     with st.spinner("🔍 구글 트렌드 스캔 중..."):
@@ -290,42 +415,58 @@ def auto_scout_trending_topics(channel_category, api_key, model_name):
             google_keywords = generate_trending_keywords_fallback()
             st.info("📊 대체 트렌드 키워드 사용")
 
-    # 2. 시즌 키워드 추가
+    # 2. 시즌 키워드 + 카테고리 전문 키워드 추가
     seasonal = get_seasonal_keywords()
-    all_keywords = list(set(google_keywords + seasonal))
+    category_keywords = random.sample(profile['keywords'], min(3, len(profile['keywords'])))
+    category_themes = random.sample(profile['themes'], min(2, len(profile['themes'])))
+
+    all_keywords = list(set(google_keywords + seasonal + category_keywords + category_themes))
 
     # 3. 채널 카테고리에 맞게 필터링
-    with st.spinner(f"🎯 '{channel_category}' 채널에 맞게 필터링 중..."):
+    with st.spinner(f"🎯 '{channel_category}' 특성에 맞게 필터링 중..."):
         filtered = filter_keywords_for_channel(all_keywords, channel_category, api_key, model_name)
 
     return filtered
 
 def generate_viral_concept_from_keyword(keyword_data, channel_category, api_key, model_name):
-    """필터링된 키워드로 바이럴 콘셉트 생성"""
+    """필터링된 키워드로 바이럴 콘셉트 생성 (강화된 버전)"""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
 
         keyword = keyword_data.get("keyword", keyword_data) if isinstance(keyword_data, dict) else keyword_data
         angle = keyword_data.get("angle", "") if isinstance(keyword_data, dict) else ""
+        concept_hint = keyword_data.get("concept_hint", "") if isinstance(keyword_data, dict) else ""
 
-        prompt = f"""'{channel_category}' 분야 뮤직비디오 콘셉트를 만들어줘.
+        profile = get_category_profile(channel_category)
 
-트렌드 키워드: {keyword}
-활용 각도: {angle}
+        prompt = f"""'{channel_category}' 영상 콘셉트를 만들어줘.
 
-다음을 포함해서 2-3문장으로 영화 같은 콘셉트를 작성해:
-- 독특한 주인공/캐릭터
-- 시각적으로 인상적인 배경/장소
-- 핵심 감정/테마
-- 비주얼 스타일 레퍼런스
+## 카테고리 특성
+- 비주얼 레퍼런스: {', '.join(profile['visual_refs'][:3])}
+- 스타일 가이드: {profile['style_guide']}
+- 주요 테마: {', '.join(profile['themes'][:4])}
 
-영어로 작성해줘 (이미지 생성용)."""
+## 입력
+- 트렌드 키워드: {keyword}
+- 활용 각도: {angle}
+- 콘셉트 힌트: {concept_hint}
+
+## 요청
+위 정보를 바탕으로 '{channel_category}'에 최적화된 영상 콘셉트를 작성해.
+
+포함할 내용:
+1. 독특한 주인공/캐릭터 또는 피사체
+2. 시각적으로 인상적인 배경/장소
+3. 핵심 감정/테마/메시지
+4. {channel_category}에 맞는 비주얼 스타일
+
+2-3문장으로 영화 같은 콘셉트를 영어로 작성해 (이미지 생성용)."""
 
         response = model.generate_content(prompt)
         return response.text.strip()
     except:
-        return f"A {channel_category} inspired visual story about {keyword}, cinematic and emotionally compelling"
+        return f"A {channel_category} inspired visual story about {keyword}, {profile['style_guide']}, cinematic and emotionally compelling"
 
 # --- API 키 ---
 def get_api_key(key_name):

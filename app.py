@@ -201,6 +201,85 @@ def get_api_key(key_name):
     elif os.getenv(key_name): return os.getenv(key_name)
     return None
 
+# --- 프로젝트 저장/불러오기 (JSONBin) ---
+JSONBIN_API_URL = "https://api.jsonbin.io/v3"
+
+def load_project_list_from_jsonbin(bin_id, api_key):
+    """JSONBin에서 프로젝트 리스트 불러오기"""
+    headers = {"X-Master-Key": api_key}
+
+    try:
+        response = requests.get(f"{JSONBIN_API_URL}/b/{bin_id}/latest", headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            record = result.get("record", {})
+            projects = record.get("projects", [])
+            return projects, None
+        else:
+            return [], f"불러오기 실패: {response.status_code}"
+    except Exception as e:
+        return [], f"불러오기 오류: {str(e)}"
+
+def save_project_list_to_jsonbin(projects, bin_id, api_key):
+    """JSONBin에 프로젝트 리스트 저장 (기존 bin 업데이트)"""
+    headers = {
+        "Content-Type": "application/json",
+        "X-Master-Key": api_key
+    }
+
+    data = {"projects": projects}
+
+    try:
+        response = requests.put(f"{JSONBIN_API_URL}/b/{bin_id}", json=data, headers=headers, timeout=30)
+        if response.status_code == 200:
+            return True, None
+        else:
+            return False, f"저장 실패: {response.status_code} - {response.text[:100]}"
+    except Exception as e:
+        return False, f"저장 오류: {str(e)}"
+
+def add_project_to_list(new_project, projects, max_projects=50):
+    """프로젝트 리스트에 새 프로젝트 추가 (최대 개수 제한)"""
+    # 같은 제목이 있으면 업데이트
+    project_title = new_project.get('plan_data', {}).get('project_title', 'Untitled')
+    updated = False
+    for i, p in enumerate(projects):
+        if p.get('plan_data', {}).get('project_title') == project_title:
+            projects[i] = new_project
+            updated = True
+            break
+
+    if not updated:
+        projects.insert(0, new_project)  # 최신 항목을 맨 앞에
+
+    # 최대 개수 제한
+    if len(projects) > max_projects:
+        projects = projects[:max_projects]
+
+    return projects
+
+def delete_project_from_list(project_index, projects):
+    """프로젝트 리스트에서 삭제"""
+    if 0 <= project_index < len(projects):
+        del projects[project_index]
+    return projects
+
+def prepare_project_for_save(plan_data, topic="", settings=None):
+    """프로젝트 데이터를 저장용으로 준비 (이미지 제외)"""
+    save_data = {
+        "version": "1.0",
+        "saved_at": datetime.now().isoformat(),
+        "topic": topic,
+        "settings": settings or {},
+        "plan_data": plan_data
+    }
+    return save_data
+
+def export_project_json(plan_data, topic="", settings=None):
+    """프로젝트를 JSON 문자열로 내보내기"""
+    save_data = prepare_project_for_save(plan_data, topic, settings)
+    return json.dumps(save_data, ensure_ascii=False, indent=2)
+
 # --- 장르/스타일 (확장) ---
 VIDEO_GENRES = [
     "Action/Thriller", "Sci-Fi Epic", "Dark Fantasy", "Psychological Horror", "Romantic Drama", 
@@ -418,15 +497,14 @@ with st.sidebar:
             st.success("✅ Gemini Key 연결됨")
         else:
             gemini_key = st.text_input("Gemini API Key", type="password")
-        
-        # Segmind Key (추가됨)
+
+        # Segmind Key (Secrets에서만 가져옴)
         segmind_key = get_api_key("SEGMIND_API_KEY")
         if segmind_key:
             st.success("✅ Segmind Key 연결됨")
-        else:
-            segmind_key = st.text_input("Segmind API Key (선택)", type="password")
-            
-        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+
+        # Gemini API 모델 선택
+        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         gemini_model = st.selectbox("모델", model_options, index=0)
     
     st.markdown("---")
@@ -455,6 +533,131 @@ with st.sidebar:
         auto_genre_enabled = st.checkbox("🎬 영상 장르 자동", value=st.session_state.get('auto_genre_enabled', False), key='auto_genre_enabled')
         auto_visual_enabled = st.checkbox("🎨 비주얼 스타일 자동", value=st.session_state.get('auto_visual_enabled', False), key='auto_visual_enabled')
         auto_music_enabled = st.checkbox("🎵 음악 장르 자동", value=st.session_state.get('auto_music_enabled', False), key='auto_music_enabled')
+
+    # 프로젝트 저장/불러오기
+    with st.expander("💾 프로젝트 관리", expanded=False):
+        # Secrets에서 JSONBin 설정 가져오기
+        jsonbin_key = get_api_key("JSONBIN_API_KEY")
+        jsonbin_bin_id = get_api_key("JSONBIN_BIN_ID")
+
+        if jsonbin_key and jsonbin_bin_id:
+            st.success("✅ 클라우드 저장소 연결됨")
+
+            # 클라우드에서 프로젝트 리스트 불러오기
+            if 'cloud_projects' not in st.session_state:
+                st.session_state.cloud_projects = []
+
+            col_refresh, col_save = st.columns(2)
+            with col_refresh:
+                if st.button("🔄 목록 새로고침", use_container_width=True, key="refresh_projects"):
+                    projects, error = load_project_list_from_jsonbin(jsonbin_bin_id, jsonbin_key)
+                    if error:
+                        st.error(error)
+                    else:
+                        st.session_state.cloud_projects = projects
+                        st.success(f"✅ {len(projects)}개 프로젝트 로드")
+                        st.rerun()
+
+            with col_save:
+                if st.button("☁️ 현재 프로젝트 저장", use_container_width=True, key="save_cloud"):
+                    if st.session_state.get('plan_data'):
+                        save_data = prepare_project_for_save(
+                            st.session_state['plan_data'],
+                            st.session_state.get('random_topic', ''),
+                            {
+                                'scene_count': st.session_state.get('scene_count', 8),
+                                'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
+                            }
+                        )
+                        # 기존 리스트에 추가
+                        updated_list = add_project_to_list(save_data, st.session_state.cloud_projects.copy())
+                        success, error = save_project_list_to_jsonbin(updated_list, jsonbin_bin_id, jsonbin_key)
+                        if success:
+                            st.session_state.cloud_projects = updated_list
+                            st.success("✅ 저장 완료!")
+                        else:
+                            st.error(error)
+                    else:
+                        st.warning("저장할 프로젝트가 없습니다")
+
+            # 저장된 프로젝트 목록 표시
+            if st.session_state.cloud_projects:
+                st.markdown("---")
+                st.caption(f"📁 저장된 프로젝트 ({len(st.session_state.cloud_projects)}개)")
+
+                project_options = []
+                for i, p in enumerate(st.session_state.cloud_projects):
+                    title = p.get('plan_data', {}).get('project_title', f'프로젝트 {i+1}')
+                    saved_at = p.get('saved_at', '')[:10]  # 날짜만
+                    project_options.append(f"{title} ({saved_at})")
+
+                selected_idx = st.selectbox("프로젝트 선택", range(len(project_options)),
+                    format_func=lambda x: project_options[x], key="select_project")
+
+                col_load, col_delete = st.columns(2)
+                with col_load:
+                    if st.button("📂 불러오기", use_container_width=True, key="load_project"):
+                        data = st.session_state.cloud_projects[selected_idx]
+                        st.session_state['plan_data'] = data.get('plan_data')
+                        st.session_state['random_topic'] = data.get('topic', '')
+                        if data.get('settings'):
+                            st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
+                            st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
+                        st.success("✅ 불러오기 완료!")
+                        st.rerun()
+
+                with col_delete:
+                    if st.button("🗑️ 삭제", use_container_width=True, key="delete_project"):
+                        updated_list = delete_project_from_list(selected_idx, st.session_state.cloud_projects.copy())
+                        success, error = save_project_list_to_jsonbin(updated_list, jsonbin_bin_id, jsonbin_key)
+                        if success:
+                            st.session_state.cloud_projects = updated_list
+                            st.success("✅ 삭제 완료!")
+                            st.rerun()
+                        else:
+                            st.error(error)
+        else:
+            st.caption("⚠️ Secrets에 JSONBIN_API_KEY, JSONBIN_BIN_ID 설정 필요")
+
+        # 로컬 파일 저장/불러오기 (항상 표시)
+        st.markdown("---")
+        st.caption("📁 로컬 파일")
+
+        if st.session_state.get('plan_data'):
+            project_json = export_project_json(
+                st.session_state['plan_data'],
+                st.session_state.get('random_topic', ''),
+                {
+                    'scene_count': st.session_state.get('scene_count', 8),
+                    'seconds_per_scene': st.session_state.get('seconds_per_scene', 5)
+                }
+            )
+            project_name = st.session_state['plan_data'].get('project_title', 'project')
+            safe_name = re.sub(r'[^\w\s-]', '', project_name).strip().replace(' ', '_')
+
+            st.download_button(
+                label="💾 다운로드 (.json)",
+                data=project_json,
+                file_name=f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+        uploaded_file = st.file_uploader("파일 불러오기", type=['json'], key="upload_project")
+        if uploaded_file:
+            try:
+                content = uploaded_file.read().decode('utf-8')
+                data = json.loads(content)
+                if st.button("📂 파일 적용", use_container_width=True):
+                    st.session_state['plan_data'] = data.get('plan_data', data)
+                    st.session_state['random_topic'] = data.get('topic', '')
+                    if data.get('settings'):
+                        st.session_state['scene_count'] = data['settings'].get('scene_count', 8)
+                        st.session_state['seconds_per_scene'] = data['settings'].get('seconds_per_scene', 5)
+                    st.success("✅ 불러오기 완료!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"파일 읽기 오류: {e}")
 
 # --- 메인 화면 ---
 st.title("🎬 AI MV Director Pro")
@@ -552,6 +755,54 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             st.session_state.selected_music_idx = random.randint(0, len(MUSIC_GENRES) - 1)
             st.rerun()
 
+    # 타임라인 설정 (form 밖에서 실시간 업데이트)
+    st.markdown("#### ⏱️ 타임라인 설정")
+    duration_mode = st.radio("런닝타임 설정 방식", ["총 런닝타임 기준", "씬 개수 직접 지정"],
+                             horizontal=True, key="duration_mode")
+
+    if duration_mode == "총 런닝타임 기준":
+        col_d1, col_d2, col_d3 = st.columns(3)
+        with col_d1:
+            total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=600,
+                                            value=st.session_state.total_duration, step=5,
+                                            key="input_total_duration")
+        with col_d2:
+            seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene,
+                                         key="input_seconds_per_scene")
+        with col_d3:
+            scene_count = max(1, int(total_duration / seconds_per_scene))
+            st.markdown(f"""
+            <div class='realtime-calc'>
+                📊 총 <b>{scene_count}</b>개 씬<br>
+                <small>{total_duration}초 ÷ {seconds_per_scene}초</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.session_state.scene_count = scene_count
+        st.session_state.total_duration = total_duration
+        st.session_state.seconds_per_scene = seconds_per_scene
+    else:
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            scene_count = st.number_input("씬 개수", min_value=2, max_value=50,
+                                         value=st.session_state.scene_count, step=1,
+                                         key="input_scene_count")
+        with col_s2:
+            seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene,
+                                         key="input_seconds_per_scene_2")
+        with col_s3:
+            total_duration = scene_count * seconds_per_scene
+            st.markdown(f"""
+            <div class='realtime-calc'>
+                ⏱️ 총 <b>{total_duration}</b>초<br>
+                <small>({total_duration//60}분 {total_duration%60}초)</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.session_state.scene_count = scene_count
+        st.session_state.seconds_per_scene = seconds_per_scene
+        st.session_state.total_duration = total_duration
+
     with st.form("project_form"):
         topic = st.text_area("🎯 영상 주제/컨셉", height=120, 
                             value=st.session_state.random_topic if st.session_state.random_topic else "",
@@ -581,57 +832,15 @@ with st.expander("📝 프로젝트 설정", expanded=True):
                 index=st.session_state.selected_music_idx)
 
         st.markdown("---")
-        
-        # 비율 및 런닝타임
-        col1, col2 = st.columns(2)
-        with col1:
-            aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
-            image_width, image_height = ratio_map[aspect_ratio]
-        
-        with col2:
-            duration_mode = st.radio("⏱️ 런닝타임 설정 방식", ["총 런닝타임 기준", "씬 개수 직접 지정"], horizontal=True)
-        
-        # 런닝타임/씬 설정 (실시간 동기화)
-        st.markdown("#### ⏱️ 타임라인 설정")
-        
-        if duration_mode == "총 런닝타임 기준":
-            col_d1, col_d2, col_d3 = st.columns(3)
-            with col_d1:
-                total_duration = st.number_input("총 런닝타임 (초)", min_value=10, max_value=600, 
-                                                value=st.session_state.total_duration, step=5)
-            with col_d2:
-                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
-            with col_d3:
-                scene_count = max(1, int(total_duration / seconds_per_scene))
-                st.markdown(f"""
-                <div class='realtime-calc'>
-                    📊 총 {scene_count}개 씬<br>
-                    <small>{total_duration}초 ÷ {seconds_per_scene}초</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.session_state.scene_count = scene_count
-            st.session_state.total_duration = total_duration
-            st.session_state.seconds_per_scene = seconds_per_scene
-        else:
-            col_s1, col_s2, col_s3 = st.columns(3)
-            with col_s1:
-                scene_count = st.number_input("씬 개수", min_value=2, max_value=50, 
-                                             value=st.session_state.scene_count, step=1)
-            with col_s2:
-                seconds_per_scene = st.slider("컷당 길이 (초)", 2, 20, st.session_state.seconds_per_scene)
-            with col_s3:
-                total_duration = scene_count * seconds_per_scene
-                st.markdown(f"""
-                <div class='realtime-calc'>
-                    ⏱️ 총 {total_duration}초<br>
-                    <small>({total_duration//60}분 {total_duration%60}초)</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.session_state.scene_count = scene_count
-            st.session_state.seconds_per_scene = seconds_per_scene
-        
+
+        # 화면 비율
+        aspect_ratio = st.selectbox("🎞️ 화면 비율", list(ratio_map.keys()), index=0)
+        image_width, image_height = ratio_map[aspect_ratio]
+
+        # 타임라인 정보는 form 밖에서 설정된 session_state 값 사용
+        scene_count = st.session_state.scene_count
+        seconds_per_scene = st.session_state.seconds_per_scene
+
         st.markdown("---")
         
         # 스토리 옵션
@@ -654,44 +863,68 @@ with st.expander("📝 프로젝트 설정", expanded=True):
         submit_btn = st.form_submit_button("🚀 프로젝트 생성", use_container_width=True, type="primary")
 
 # ------------------------------------------------------------------
-# JSON 정리 함수
+# JSON 정리 함수 (개선됨)
 # ------------------------------------------------------------------
 def clean_json_text(text):
+    if not text:
+        return ""
+
+    original_text = text
+
+    # 1. ```json ... ``` 블록에서 추출
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         text = match.group(1)
     else:
+        # 2. ``` ... ``` 블록에서 추출
         match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
         if match:
             text = match.group(1)
-    
+        else:
+            # 3. { 로 시작하고 } 로 끝나는 JSON 객체 찾기
+            match = re.search(r'(\{[\s\S]*\})', text)
+            if match:
+                text = match.group(1)
+
     text = text.strip()
+
+    # JSON이 비어있으면 원본에서 다시 시도
+    if not text or text == "":
+        # 원본에서 첫 번째 { 부터 마지막 } 까지 추출
+        start_idx = original_text.find('{')
+        end_idx = original_text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = original_text[start_idx:end_idx + 1]
+
+    # JSON 정리
     text = re.sub(r',\s*}', '}', text)
     text = re.sub(r',\s*]', ']', text)
     text = re.sub(r'//.*?\n', '\n', text)
-    
+    # 여러 줄 주석 제거
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+
     # JSON 문자열 내의 제어 문자 이스케이프 처리
     def escape_control_chars_in_strings(json_str):
         result = []
         in_string = False
         escape_next = False
-        
+
         for char in json_str:
             if escape_next:
                 result.append(char)
                 escape_next = False
                 continue
-            
+
             if char == '\\':
                 result.append(char)
                 escape_next = True
                 continue
-            
+
             if char == '"':
                 in_string = not in_string
                 result.append(char)
                 continue
-            
+
             if in_string:
                 if char == '\n':
                     result.append('\\n')
@@ -705,9 +938,9 @@ def clean_json_text(text):
                     result.append(char)
             else:
                 result.append(char)
-        
+
         return ''.join(result)
-    
+
     text = escape_control_chars_in_strings(text)
     return text
 
@@ -1465,16 +1698,84 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
             pass
         if attempt < max_retries - 1:
             time.sleep(2)
-            
+
     return None, None
+
+def get_preview_size(width, height):
+    """프리뷰용 저화질 사이즈 계산 (원본의 50% 또는 최대 512px)"""
+    scale = min(512 / max(width, height), 0.5)
+    preview_w = max(256, int(width * scale))
+    preview_h = max(256, int(height * scale))
+    # 8의 배수로 맞춤 (이미지 생성 모델 요구사항)
+    preview_w = (preview_w // 8) * 8
+    preview_h = (preview_h // 8) * 8
+    return preview_w, preview_h
+
+def generate_all_preview_images(plan_data, img_width, img_height, provider, use_json=True, max_retries=2):
+    """모든 씬의 프리뷰 이미지를 자동 생성"""
+    if not plan_data:
+        return
+
+    scenes = plan_data.get('scenes', [])
+    if not scenes:
+        return
+
+    # 프리뷰용 저화질 사이즈
+    preview_w, preview_h = get_preview_size(img_width, img_height)
+
+    # 진행 상태 표시
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    generated_count = 0
+    total_scenes = len(scenes)
+
+    for idx, scene in enumerate(scenes):
+        scene_num = scene.get('scene_num', idx + 1)
+        status_text.text(f"🎨 프리뷰 이미지 생성 중... ({idx + 1}/{total_scenes}) - Scene {scene_num}")
+
+        # 이미지 프롬프트 가져오기
+        base_prompt = scene.get('image_prompt', '')
+        if not base_prompt:
+            continue
+
+        # JSON 프로필 적용
+        if use_json and 'used_turntables' in scene:
+            final_prompt = apply_json_profiles_to_prompt(
+                base_prompt,
+                scene['used_turntables'],
+                plan_data.get('turntable', {})
+            )
+        else:
+            final_prompt = base_prompt
+
+        # 프리뷰 이미지 생성
+        img, _ = try_generate_image_with_fallback(final_prompt, preview_w, preview_h, provider, max_retries)
+
+        if img:
+            if 'generated_images' not in st.session_state:
+                st.session_state['generated_images'] = {}
+            st.session_state['generated_images'][scene_num] = img
+            generated_count += 1
+
+        progress_bar.progress((idx + 1) / total_scenes)
+        time.sleep(0.3)  # API 부하 방지
+
+    progress_bar.empty()
+    status_text.empty()
+
+    if generated_count > 0:
+        st.toast(f"✅ {generated_count}개 프리뷰 이미지 생성 완료! ({preview_w}x{preview_h})")
+
+    return generated_count
 
 # ------------------------------------------------------------------
 # API 생성
 # ------------------------------------------------------------------
 def generate_with_fallback(prompt, api_key, model_name):
+    """원본 작동 버전 기반 - 단순화"""
     genai.configure(api_key=api_key)
     models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-    last_error = None
 
     for model in models_to_try:
         try:
@@ -1482,12 +1783,12 @@ def generate_with_fallback(prompt, api_key, model_name):
             response = gen_model.generate_content(prompt, generation_config={"temperature": 0.8, "max_output_tokens": 8192})
             return response.text, model
         except Exception as e:
-            last_error = f"{model}: {str(e)}"
+            st.toast(f"⚠️ {model} 실패: {str(e)[:30]}...")
             time.sleep(1)
-    raise Exception(f"All models failed. Last error: {last_error}")
+    raise Exception("All models failed")
 
 def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene):
-    response_text = None
+    """원본 작동 버전 기반"""
     for attempt in range(3):
         try:
             prompt = get_system_prompt(topic, scene_count, options, genre, visual_style, music_genre, use_json, expert_mode, seconds_per_scene)
@@ -1503,9 +1804,8 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"JSON 파싱 실패: {str(e)}")
-                if response_text:
-                    with st.expander("🔍 생성된 원본 응답 확인"):
-                        st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
+                with st.expander("🔍 생성된 원본 응답 확인"):
+                    st.code(response_text[:3000] + "..." if len(response_text) > 3000 else response_text)
                 return None
         except Exception as e:
             if attempt < 2:
@@ -1513,6 +1813,9 @@ def generate_plan_auto(topic, api_key, model_name, scene_count, options, genre, 
                 time.sleep(2)
             else:
                 st.error(f"생성 실패: {e}")
+                if response_text:
+                    with st.expander("🔍 원본 응답 확인"):
+                        st.code(response_text[:2000] if len(response_text) > 2000 else response_text)
                 return None
     return None
 
@@ -1551,6 +1854,18 @@ if submit_btn:
                 
                 if st.session_state['plan_data']:
                     st.success("✅ 기획안 생성 완료!")
+
+                    # 자동 이미지 생성이 켜져 있으면 프리뷰 이미지 생성
+                    if auto_generate:
+                        st.info("🎨 자동 프리뷰 이미지 생성을 시작합니다...")
+                        generate_all_preview_images(
+                            st.session_state['plan_data'],
+                            image_width, image_height,
+                            image_provider,
+                            use_json=use_json_profiles,
+                            max_retries=2
+                        )
+
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
@@ -1588,6 +1903,21 @@ if st.session_state.get('show_manual') and 'manual_prompt' in st.session_state:
                 st.session_state['plan_data'] = json.loads(cleaned)
                 st.session_state['show_manual'] = False
                 st.success("✅ 적용 완료!")
+
+                # 자동 이미지 생성이 켜져 있으면 프리뷰 이미지 생성
+                if auto_generate:
+                    st.info("🎨 자동 프리뷰 이미지 생성을 시작합니다...")
+                    img_w = st.session_state.get('image_width', 1024)
+                    img_h = st.session_state.get('image_height', 576)
+                    use_json = st.session_state.get('use_json_profiles', True)
+                    generate_all_preview_images(
+                        st.session_state['plan_data'],
+                        img_w, img_h,
+                        image_provider,
+                        use_json=use_json,
+                        max_retries=2
+                    )
+
                 st.rerun()
             except json.JSONDecodeError as e:
                 st.error(f"JSON 파싱 오류: {e}")

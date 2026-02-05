@@ -195,6 +195,138 @@ def get_viral_topic_with_ai(api_key, model_name):
     except:
         return generate_trending_topic()
 
+# --- Auto Trend Scouter (자동 트렌드 스카우터) ---
+SEASONAL_KEYWORDS = {
+    1: ["새해", "신년", "겨울", "설날", "다이어트", "새출발", "목표", "결심"],
+    2: ["발렌타인", "졸업", "입시", "봄", "설렘", "고백", "초콜릿"],
+    3: ["봄", "벚꽃", "새학기", "입학", "취업", "이직", "새출발"],
+    4: ["봄꽃", "벚꽃", "여행", "피크닉", "청춘", "자연"],
+    5: ["어버이날", "가정의달", "어린이날", "감사", "가족", "선물"],
+    6: ["여름", "휴가", "바다", "페스티벌", "청량", "에너지"],
+    7: ["여름휴가", "바캉스", "해변", "물놀이", "시원함", "열정"],
+    8: ["말복", "여름끝", "가을준비", "개학", "추억", "밤"],
+    9: ["가을", "추석", "단풍", "감성", "쓸쓸함", "회고"],
+    10: ["할로윈", "가을", "단풍", "공포", "미스터리", "변신"],
+    11: ["빼빼로데이", "수능", "가을끝", "쓸쓸함", "위로", "응원"],
+    12: ["크리스마스", "연말", "겨울", "눈", "회고", "송년", "파티", "선물"]
+}
+
+def get_seasonal_keywords():
+    """현재 월에 맞는 시즌 키워드 반환"""
+    current_month = datetime.now().month
+    return SEASONAL_KEYWORDS.get(current_month, ["트렌드", "바이럴"])
+
+def fetch_google_trends_keywords():
+    """구글 트렌드 급상승 검색어 가져오기 (pytrends 없이 대체)"""
+    try:
+        # pytrends 대신 RSS 피드 사용 (더 안정적)
+        url = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=KR"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            # 간단한 XML 파싱
+            import re
+            titles = re.findall(r'<title>([^<]+)</title>', response.text)
+            # 첫 번째는 피드 제목이므로 제외
+            keywords = [t for t in titles[1:11] if t and len(t) > 1]
+            return keywords if keywords else None
+        return None
+    except:
+        return None
+
+def generate_trending_keywords_fallback():
+    """구글 트렌드 실패 시 대체 키워드"""
+    base_trends = [
+        "AI", "챗GPT", "메타버스", "NFT", "비트코인", "테슬라",
+        "넷플릭스", "유튜브", "틱톡", "인스타", "K-pop", "BTS",
+        "여행", "맛집", "카페", "패션", "뷰티", "헬스", "명상",
+        "재테크", "부동산", "주식", "창업", "부업", "N잡"
+    ]
+    seasonal = get_seasonal_keywords()
+    return random.sample(base_trends, 5) + random.sample(seasonal, min(3, len(seasonal)))
+
+def filter_keywords_for_channel(keywords, channel_category, api_key, model_name):
+    """LLM으로 채널 카테고리에 맞는 키워드만 필터링"""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+
+        prompt = f"""너는 '{channel_category}' 분야 뮤직비디오/영상 콘텐츠 기획자야.
+다음 트렌드 키워드 리스트에서 '{channel_category}' 콘텐츠와 연결할 수 있는 키워드만 골라줘.
+연결이 어려운 키워드는 버리고, 연결 가능한 키워드는 어떻게 활용할 수 있는지 간단히 설명해.
+
+키워드 리스트: {keywords}
+
+JSON 형식으로 답변해줘:
+{{
+    "filtered_keywords": [
+        {{"keyword": "키워드1", "angle": "활용 각도/아이디어"}},
+        {{"keyword": "키워드2", "angle": "활용 각도/아이디어"}}
+    ]
+}}"""
+
+        response = model.generate_content(prompt)
+        text = response.text
+
+        # JSON 추출
+        match = re.search(r'\{[\s\S]*\}', text)
+        if match:
+            data = json.loads(match.group())
+            return data.get("filtered_keywords", [])
+        return []
+    except Exception as e:
+        st.warning(f"키워드 필터링 실패: {str(e)[:50]}")
+        return [{"keyword": kw, "angle": "자동 생성"} for kw in keywords[:5]]
+
+def auto_scout_trending_topics(channel_category, api_key, model_name):
+    """완전 자동 트렌드 스카우팅"""
+    st.info("📡 트렌드 레이더 가동 중...")
+
+    # 1. 구글 트렌드에서 키워드 수집
+    with st.spinner("🔍 구글 트렌드 스캔 중..."):
+        google_keywords = fetch_google_trends_keywords()
+        if google_keywords:
+            st.success(f"✅ 구글 트렌드에서 {len(google_keywords)}개 키워드 수집")
+        else:
+            google_keywords = generate_trending_keywords_fallback()
+            st.info("📊 대체 트렌드 키워드 사용")
+
+    # 2. 시즌 키워드 추가
+    seasonal = get_seasonal_keywords()
+    all_keywords = list(set(google_keywords + seasonal))
+
+    # 3. 채널 카테고리에 맞게 필터링
+    with st.spinner(f"🎯 '{channel_category}' 채널에 맞게 필터링 중..."):
+        filtered = filter_keywords_for_channel(all_keywords, channel_category, api_key, model_name)
+
+    return filtered
+
+def generate_viral_concept_from_keyword(keyword_data, channel_category, api_key, model_name):
+    """필터링된 키워드로 바이럴 콘셉트 생성"""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+
+        keyword = keyword_data.get("keyword", keyword_data) if isinstance(keyword_data, dict) else keyword_data
+        angle = keyword_data.get("angle", "") if isinstance(keyword_data, dict) else ""
+
+        prompt = f"""'{channel_category}' 분야 뮤직비디오 콘셉트를 만들어줘.
+
+트렌드 키워드: {keyword}
+활용 각도: {angle}
+
+다음을 포함해서 2-3문장으로 영화 같은 콘셉트를 작성해:
+- 독특한 주인공/캐릭터
+- 시각적으로 인상적인 배경/장소
+- 핵심 감정/테마
+- 비주얼 스타일 레퍼런스
+
+영어로 작성해줘 (이미지 생성용)."""
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except:
+        return f"A {channel_category} inspired visual story about {keyword}, cinematic and emotionally compelling"
+
 # --- API 키 ---
 def get_api_key(key_name):
     if key_name in st.secrets: return st.secrets[key_name]
@@ -534,6 +666,31 @@ with st.sidebar:
         auto_visual_enabled = st.checkbox("🎨 비주얼 스타일 자동", value=st.session_state.get('auto_visual_enabled', False), key='auto_visual_enabled')
         auto_music_enabled = st.checkbox("🎵 음악 장르 자동", value=st.session_state.get('auto_music_enabled', False), key='auto_music_enabled')
 
+    # 🚀 Auto Trend Scouter (자동 트렌드 스카우터)
+    with st.expander("🚀 Auto Trend Scouter", expanded=False):
+        st.caption("원클릭 자동 키워드 발굴 & 기획")
+
+        channel_categories = [
+            "뮤직비디오/음악", "자기계발/동기부여", "재테크/경제", "IT/테크",
+            "뷰티/패션", "여행/브이로그", "게임", "푸드/쿡방",
+            "교육/강의", "엔터테인먼트", "스포츠/피트니스", "라이프스타일"
+        ]
+
+        if 'channel_category' not in st.session_state:
+            st.session_state.channel_category = "뮤직비디오/음악"
+
+        channel_category = st.selectbox(
+            "📺 채널 카테고리",
+            channel_categories,
+            index=channel_categories.index(st.session_state.get('channel_category', "뮤직비디오/음악")),
+            key="channel_cat_select"
+        )
+        st.session_state.channel_category = channel_category
+
+        auto_scout_enabled = st.checkbox("🤖 자동 스카우팅 활성화", value=True, key="auto_scout_enabled")
+
+        st.caption(f"🗓️ 현재 시즌 키워드: {', '.join(get_seasonal_keywords()[:3])}")
+
     # 프로젝트 저장/불러오기
     with st.expander("💾 프로젝트 관리", expanded=False):
         # Secrets에서 JSONBin 설정 가져오기
@@ -685,7 +842,10 @@ defaults = {
     'auto_music_enabled': False,
     'selected_genre_idx': 0,
     'selected_visual_idx': 0,
-    'selected_music_idx': 0
+    'selected_music_idx': 0,
+    'channel_category': '뮤직비디오/음악',
+    'scouted_keywords': [],
+    'auto_scout_enabled': True
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -708,7 +868,7 @@ with st.expander("📝 프로젝트 설정", expanded=True):
             if st.session_state.get('auto_music_enabled', False):
                 st.session_state.selected_music_idx = music_idx
 
-    col_t1, col_t2, col_t3 = st.columns(3)
+    col_t1, col_t2, col_t3, col_t4 = st.columns(4)
     with col_t1:
         if st.button("🎲 랜덤 생성", use_container_width=True):
             st.session_state.random_topic = generate_trending_topic()
@@ -728,6 +888,43 @@ with st.expander("📝 프로젝트 설정", expanded=True):
                 st.rerun()
             else:
                 st.warning("API 키 필요")
+    with col_t4:
+        if st.button("🚀 트렌드 스카우트", use_container_width=True, help="실시간 트렌드 기반 자동 키워드 발굴"):
+            if gemini_key and st.session_state.get('auto_scout_enabled', True):
+                with st.spinner("📡 트렌드 스카우팅 중..."):
+                    channel_cat = st.session_state.get('channel_category', '뮤직비디오/음악')
+                    filtered_keywords = auto_scout_trending_topics(channel_cat, gemini_key, gemini_model)
+
+                    if filtered_keywords:
+                        # 첫 번째 키워드로 콘셉트 생성
+                        first_kw = filtered_keywords[0]
+                        concept = generate_viral_concept_from_keyword(first_kw, channel_cat, gemini_key, gemini_model)
+                        st.session_state.random_topic = concept
+                        st.session_state.scouted_keywords = filtered_keywords
+                        apply_auto_style_settings(concept)
+                        st.success(f"✅ '{first_kw.get('keyword', first_kw)}' 키워드로 콘셉트 생성 완료!")
+                        st.rerun()
+                    else:
+                        st.warning("트렌드 키워드를 찾지 못했습니다")
+            else:
+                st.warning("API 키가 필요하거나 Auto Scout가 비활성화되어 있습니다")
+
+    # 스카우트된 키워드 표시
+    if st.session_state.get('scouted_keywords'):
+        with st.expander("🔥 스카우트된 트렌드 키워드", expanded=False):
+            for i, kw_data in enumerate(st.session_state.scouted_keywords[:5]):
+                keyword = kw_data.get('keyword', kw_data) if isinstance(kw_data, dict) else kw_data
+                angle = kw_data.get('angle', '') if isinstance(kw_data, dict) else ''
+                col_kw1, col_kw2 = st.columns([1, 3])
+                with col_kw1:
+                    if st.button(f"📌 {keyword}", key=f"kw_btn_{i}", use_container_width=True):
+                        if gemini_key:
+                            concept = generate_viral_concept_from_keyword(kw_data, st.session_state.get('channel_category', '뮤직비디오/음악'), gemini_key, gemini_model)
+                            st.session_state.random_topic = concept
+                            apply_auto_style_settings(concept)
+                            st.rerun()
+                with col_kw2:
+                    st.caption(angle if angle else "클릭하여 콘셉트 생성")
     
     if st.session_state.random_topic:
         st.info(f"💡 {st.session_state.random_topic}")

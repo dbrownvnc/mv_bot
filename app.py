@@ -1988,6 +1988,8 @@ def generate_image_nanobanana(prompt, width, height, api_key):
     if not api_key:
         return None
 
+    last_error = None
+
     try:
         from google import genai
         from google.genai import types
@@ -2018,17 +2020,26 @@ def generate_image_nanobanana(prompt, width, height, api_key):
                             img = Image.open(BytesIO(image_bytes))
                             st.toast(f"✅ Nano Banana ({model_name}) 성공!")
                             return img
+                        elif hasattr(part, 'text') and part.text:
+                            # 텍스트만 반환된 경우 (이미지 생성 실패)
+                            last_error = f"{model_name}: 텍스트만 반환됨"
+                else:
+                    last_error = f"{model_name}: 응답 없음"
 
             except Exception as model_err:
+                last_error = f"{model_name}: {str(model_err)[:80]}"
                 continue  # 다음 모델 시도
 
+        # 모든 모델 실패
+        if last_error:
+            st.toast(f"⚠️ Nano Banana: {last_error}")
         return None
 
     except ImportError as e:
         st.toast("⚠️ google-genai 미설치. pip install google-genai 실행 필요")
         return None
     except Exception as e:
-        st.toast(f"⚠️ Nano Banana: {str(e)[:50]}")
+        st.toast(f"⚠️ Nano Banana: {str(e)[:80]}")
         return None
 
 def generate_image_segmind(prompt, width, height, api_key):

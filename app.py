@@ -785,8 +785,13 @@ with st.sidebar:
     auto_generate = st.checkbox("자동 이미지 생성", value=False)
     infinite_retry = st.checkbox("무한 재시도", value=False)
     
-    # 이미지 공급자 선택 (Segmind 복구 및 기본값 설정)
-    image_provider = st.selectbox("엔진", ["Segmind (기본/안정)", "Pollinations Flux", "Pollinations Turbo ⚡"], index=0)
+    # 이미지 공급자 선택
+    image_provider = st.selectbox("엔진", [
+        "Nano Banana 🍌 (Gemini)",
+        "Segmind (SDXL)",
+        "Pollinations Flux",
+        "Pollinations Turbo ⚡"
+    ], index=0, help="Nano Banana = Gemini Image API")
     
     if not infinite_retry:
         max_retries = st.slider("재시도", 1, 10, 3)
@@ -1974,8 +1979,53 @@ def create_html_export(plan_data):
     return html
 
 # ------------------------------------------------------------------
-# 이미지 생성 (Segmind 추가)
+# 이미지 생성 (Segmind, Nano Banana 추가)
 # ------------------------------------------------------------------
+def generate_image_nanobanana(prompt, width, height, api_key):
+    """Nano Banana (Gemini Image) API를 사용한 이미지 생성"""
+    if not api_key:
+        return None
+
+    try:
+        genai.configure(api_key=api_key)
+
+        # Gemini 2.0 Flash Image 모델 (Nano Banana)
+        # 다양한 모델명 시도
+        model_names = [
+            "gemini-2.0-flash-exp-image-generation",
+            "gemini-2.0-flash-preview-image-generation",
+            "imagen-3.0-generate-002",
+            "imagen-3.0-generate-001",
+        ]
+
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+
+                # 이미지 생성 요청
+                response = model.generate_content(
+                    f"Generate a high-quality, cinematic image: {prompt}",
+                    generation_config={
+                        "response_mime_type": "image/png",
+                    }
+                )
+
+                # 이미지 추출
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            image_data = part.inline_data.data
+                            return Image.open(BytesIO(base64.b64decode(image_data)))
+
+            except Exception as model_error:
+                continue  # 다음 모델 시도
+
+        return None
+
+    except Exception as e:
+        print(f"Nano Banana Error: {e}")
+        return None
+
 def generate_image_segmind(prompt, width, height, api_key):
     """Segmind API를 사용한 이미지 생성"""
     if not api_key:
@@ -2011,16 +2061,24 @@ def generate_image_segmind(prompt, width, height, api_key):
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
     """이미지 생성 시도 및 폴백 로직"""
     enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
-    
-    # 1. Segmind 우선 시도 (선택된 경우)
+
+    # 1. Nano Banana (Gemini Image) 우선 시도
+    if "Nano Banana" in provider:
+        if 'gemini_key' in globals() and gemini_key:
+            img = generate_image_nanobanana(enhanced, width, height, gemini_key)
+            if img:
+                return img, "Nano Banana 🍌"
+            st.toast("⚠️ Nano Banana 실패, Pollinations로 폴백...")
+
+    # 2. Segmind 시도 (선택된 경우)
     if "Segmind" in provider:
-        # 사이드바에서 설정한 segmind_key 가져오기 (전역변수 활용)
         if 'segmind_key' in globals() and segmind_key:
             img = generate_image_segmind(enhanced, width, height, segmind_key)
-            if img: return img, "Segmind"
-        # 키가 없거나 실패하면 Pollinations로 폴백하되 로그 남김
-    
-    # 2. Pollinations (기본 또는 폴백)
+            if img:
+                return img, "Segmind"
+            st.toast("⚠️ Segmind 실패, Pollinations로 폴백...")
+
+    # 3. Pollinations (기본 또는 폴백)
     if "Flux" in provider:
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
     else: # Turbo or Fallback
@@ -2555,4 +2613,4 @@ if st.session_state.get('plan_data'):
 
 # Footer
 st.markdown("---")
-st.caption("🎬 AI MV Director Pro | Powered by Gemini & Segmind & Pollinations")
+st.caption("🎬 AI MV Director Pro | Powered by Gemini & Nano Banana 🍌 & Segmind & Pollinations")

@@ -1982,48 +1982,53 @@ def create_html_export(plan_data):
 # 이미지 생성 (Segmind, Nano Banana 추가)
 # ------------------------------------------------------------------
 def generate_image_nanobanana(prompt, width, height, api_key):
-    """Nano Banana (Gemini Image) API를 사용한 이미지 생성"""
+    """Nano Banana (Gemini Image) API를 사용한 이미지 생성
+    https://ai.google.dev/gemini-api/docs/image-generation
+    """
     if not api_key:
         return None
 
     try:
-        genai.configure(api_key=api_key)
+        from google import genai
+        from google.genai import types
 
-        # Gemini 2.0 Flash Image 모델 (Nano Banana)
-        # 다양한 모델명 시도
-        model_names = [
-            "gemini-2.0-flash-exp-image-generation",
+        client = genai.Client(api_key=api_key)
+
+        # 여러 모델 시도 (최신순)
+        models_to_try = [
+            "gemini-2.0-flash-exp",
             "gemini-2.0-flash-preview-image-generation",
-            "imagen-3.0-generate-002",
-            "imagen-3.0-generate-001",
         ]
 
-        for model_name in model_names:
+        for model_name in models_to_try:
             try:
-                model = genai.GenerativeModel(model_name)
-
-                # 이미지 생성 요청
-                response = model.generate_content(
-                    f"Generate a high-quality, cinematic image: {prompt}",
-                    generation_config={
-                        "response_mime_type": "image/png",
-                    }
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=f"Generate a high-quality, cinematic image with no text: {prompt}",
+                    config=types.GenerateContentConfig(
+                        response_modalities=['Image', 'Text']
+                    )
                 )
 
                 # 이미지 추출
                 if response.candidates and response.candidates[0].content.parts:
                     for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            image_data = part.inline_data.data
-                            return Image.open(BytesIO(base64.b64decode(image_data)))
+                        if hasattr(part, 'inline_data') and part.inline_data is not None:
+                            image_bytes = part.inline_data.data
+                            img = Image.open(BytesIO(image_bytes))
+                            st.toast(f"✅ Nano Banana ({model_name}) 성공!")
+                            return img
 
-            except Exception as model_error:
+            except Exception as model_err:
                 continue  # 다음 모델 시도
 
         return None
 
+    except ImportError as e:
+        st.toast("⚠️ google-genai 미설치. pip install google-genai 실행 필요")
+        return None
     except Exception as e:
-        print(f"Nano Banana Error: {e}")
+        st.toast(f"⚠️ Nano Banana: {str(e)[:50]}")
         return None
 
 def generate_image_segmind(prompt, width, height, api_key):

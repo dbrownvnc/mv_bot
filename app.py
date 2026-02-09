@@ -2181,20 +2181,26 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
     # 1. Nano Banana (Gemini Image) 우선 시도
     if "Nano Banana" in provider:
         add_image_log("1단계: Nano Banana (Gemini Image) 시도", "info")
-        if 'gemini_key' in globals() and gemini_key:
-            img, actual_model = generate_image_nanobanana(enhanced, width, height, gemini_key)
+        # globals의 gemini_key 또는 Secrets/환경변수에서 직접 가져오기
+        nb_api_key = (globals().get('gemini_key') or
+                      get_api_key("GOOGLE_API_KEY") or
+                      get_api_key("GEMINI_API_KEY"))
+        if nb_api_key:
+            add_image_log(f"API 키 확인됨 (소스: {'globals' if globals().get('gemini_key') else 'Secrets/환경변수'})", "info")
+            img, actual_model = generate_image_nanobanana(enhanced, width, height, nb_api_key)
             if img:
                 return img, f"Nano Banana 🍌 ({actual_model})"
             add_image_log("Nano Banana 실패 → Pollinations 폴백 진행", "warn")
             st.toast("⚠️ Nano Banana 실패, Pollinations로 폴백...")
         else:
-            add_image_log("Nano Banana: Gemini API 키 미설정, 폴백 진행", "warn")
+            add_image_log("Nano Banana: Gemini API 키 미설정 (Secrets에 GEMINI_API_KEY 또는 GOOGLE_API_KEY 설정 필요)", "warn")
 
     # 2. Segmind 시도 (선택된 경우)
     if "Segmind" in provider:
         add_image_log("1단계: Segmind (SDXL) 시도", "info")
-        if 'segmind_key' in globals() and segmind_key:
-            img = generate_image_segmind(enhanced, width, height, segmind_key)
+        sg_api_key = globals().get('segmind_key') or get_api_key("SEGMIND_API_KEY")
+        if sg_api_key:
+            img = generate_image_segmind(enhanced, width, height, sg_api_key)
             if img:
                 return img, "Segmind (SDXL 1.0)"
             add_image_log("Segmind 실패 → Pollinations 폴백 진행", "warn")

@@ -90,8 +90,45 @@ st.markdown("""
         font-weight: bold;
         margin: 10px 0;
     }
+    .img-log-entry {
+        font-size: 12px;
+        padding: 4px 8px;
+        margin: 2px 0;
+        border-radius: 4px;
+        font-family: monospace;
+        line-height: 1.4;
+    }
+    .img-log-info { background-color: #e8f4fd; border-left: 3px solid #2196F3; }
+    .img-log-success { background-color: #e8f5e9; border-left: 3px solid #4CAF50; }
+    .img-log-warn { background-color: #fff8e1; border-left: 3px solid #FF9800; }
+    .img-log-error { background-color: #fce4ec; border-left: 3px solid #f44336; }
+    .img-log-model { background-color: #f3e5f5; border-left: 3px solid #9C27B0; }
 </style>
 """, unsafe_allow_html=True)
+
+# ------------------------------------------------------------------
+# 이미지 생성 실시간 로그 시스템
+# ------------------------------------------------------------------
+if 'image_gen_logs' not in st.session_state:
+    st.session_state['image_gen_logs'] = []
+
+def add_image_log(message, level="info"):
+    """이미지 생성 로그 추가
+    level: info, success, warn, error, model
+    """
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    st.session_state['image_gen_logs'].append({
+        'time': timestamp,
+        'message': message,
+        'level': level
+    })
+    # 최대 100개 로그 유지
+    if len(st.session_state['image_gen_logs']) > 100:
+        st.session_state['image_gen_logs'] = st.session_state['image_gen_logs'][-100:]
+
+def clear_image_logs():
+    """이미지 생성 로그 초기화"""
+    st.session_state['image_gen_logs'] = []
 
 # --- 확장된 트렌드 키워드 (대폭 확장) ---
 TRENDING_KEYWORDS = {
@@ -802,6 +839,31 @@ with st.sidebar:
     if st.button("🗑️ 전체 초기화"):
         st.session_state.clear()
         st.rerun()
+
+    st.markdown("---")
+
+    # 실시간 이미지 생성 로그
+    with st.expander("📋 이미지 생성 로그", expanded=True):
+        log_col1, log_col2 = st.columns([3, 1])
+        with log_col2:
+            if st.button("🗑️", key="clear_img_log", help="로그 초기화"):
+                clear_image_logs()
+                st.rerun()
+
+        logs = st.session_state.get('image_gen_logs', [])
+        if logs:
+            # 최근 로그가 위에 오도록 역순 표시
+            log_html = ""
+            for log_entry in reversed(logs[-30:]):
+                level_class = f"img-log-{log_entry['level']}"
+                level_icon = {
+                    'info': 'ℹ️', 'success': '✅', 'warn': '⚠️',
+                    'error': '❌', 'model': '🤖'
+                }.get(log_entry['level'], 'ℹ️')
+                log_html += f"<div class='img-log-entry {level_class}'>{level_icon} <b>[{log_entry['time']}]</b> {log_entry['message']}</div>"
+            st.markdown(log_html, unsafe_allow_html=True)
+        else:
+            st.caption("이미지 생성 시 로그가 여기에 표시됩니다")
 
     st.markdown("---")
 
@@ -1988,9 +2050,12 @@ def generate_image_nanobanana(prompt, width, height, api_key):
     지원 모델 (2026년 기준):
     - gemini-2.0-flash-exp-image-generation: 이미지 생성 전용 (2026년 3월까지)
     - gemini-3-pro-image-preview: Nano Banana Pro (유료 티어 필요)
+
+    Returns: (img, model_name) or (None, None)
     """
     if not api_key:
-        return None
+        add_image_log("Nano Banana: API 키 없음", "error")
+        return None, None
 
     last_error = None
 
@@ -1999,6 +2064,7 @@ def generate_image_nanobanana(prompt, width, height, api_key):
         from google.genai import types
 
         client = genai.Client(api_key=api_key)
+        add_image_log("Nano Banana 엔진 초기화 완료", "info")
 
         # 최신 모델 순서로 시도
         models_to_try = [
@@ -2007,7 +2073,8 @@ def generate_image_nanobanana(prompt, width, height, api_key):
             "gemini-3-pro-image-preview",              # Nano Banana Pro (유료)
         ]
 
-        for model_name in models_to_try:
+        for idx, model_name in enumerate(models_to_try):
+            add_image_log(f"모델 시도 [{idx+1}/{len(models_to_try)}]: {model_name}", "model")
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -2023,47 +2090,59 @@ def generate_image_nanobanana(prompt, width, height, api_key):
                         if hasattr(part, 'inline_data') and part.inline_data is not None:
                             image_bytes = part.inline_data.data
                             img = Image.open(BytesIO(image_bytes))
+                            add_image_log(f"이미지 생성 성공! 모델: {model_name} | 크기: {img.size[0]}x{img.size[1]}", "success")
                             st.toast(f"✅ Nano Banana ({model_name}) 성공!")
-                            return img
+                            return img, model_name
                         elif hasattr(part, 'text') and part.text:
                             # 텍스트만 반환된 경우 (이미지 생성 실패)
                             last_error = f"{model_name}: 텍스트만 반환됨"
+                            add_image_log(f"{model_name}: 텍스트만 반환됨 (이미지 미생성)", "warn")
                 else:
                     last_error = f"{model_name}: 응답 없음"
+                    add_image_log(f"{model_name}: 빈 응답 수신", "warn")
 
             except Exception as model_err:
                 err_str = str(model_err)
                 # 에러 유형별 처리
                 if "429" in err_str or "quota" in err_str.lower():
                     last_error = f"{model_name}: API 할당량 초과 (유료 플랜 필요)"
+                    add_image_log(f"{model_name}: 429 할당량 초과 - 유료 플랜 필요", "error")
                 elif "403" in err_str or "permission" in err_str.lower():
                     last_error = f"{model_name}: API 권한 없음 (결제 설정 필요)"
+                    add_image_log(f"{model_name}: 403 권한 없음 - 결제 설정 필요", "error")
                 elif "404" in err_str:
                     last_error = f"{model_name}: 모델 없음"
+                    add_image_log(f"{model_name}: 404 모델을 찾을 수 없음", "error")
                 else:
                     last_error = f"{model_name}: {err_str[:60]}"
+                    add_image_log(f"{model_name}: {err_str[:80]}", "error")
                 continue  # 다음 모델 시도
 
         # 모든 모델 실패
+        add_image_log(f"Nano Banana 전체 실패 - {len(models_to_try)}개 모델 모두 실패", "error")
         if last_error:
             st.toast(f"⚠️ Nano Banana: {last_error}")
-        return None
+        return None, None
 
     except ImportError as e:
+        add_image_log("google-genai 패키지 미설치 (pip install google-genai 필요)", "error")
         st.toast("⚠️ google-genai 미설치. pip install google-genai 실행 필요")
-        return None
+        return None, None
     except Exception as e:
+        add_image_log(f"Nano Banana 예외: {str(e)[:80]}", "error")
         st.toast(f"⚠️ Nano Banana: {str(e)[:80]}")
-        return None
+        return None, None
 
 def generate_image_segmind(prompt, width, height, api_key):
     """Segmind API를 사용한 이미지 생성"""
     if not api_key:
+        add_image_log("Segmind: API 키 없음", "error")
         return None
-    
+
     # SDXL 1.0 모델 엔드포인트
     url = "https://api.segmind.com/v1/sdxl1.0-txt2img"
-    
+    add_image_log("Segmind (SDXL 1.0) 모델 요청 중...", "model")
+
     payload = {
         "prompt": prompt,
         "negative_prompt": "ugly, tiling, poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, disfigured, deformed, body out of frame, blurry, bad anatomy, blurred, watermark, grainy, signature, cut off, draft",
@@ -2077,55 +2156,87 @@ def generate_image_segmind(prompt, width, height, api_key):
         "img_height": height,
         "base64": False
     }
-    
+
     headers = {'x-api-key': api_key}
-    
+
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=60)
         if response.status_code == 200:
-            return Image.open(BytesIO(response.content))
+            img = Image.open(BytesIO(response.content))
+            add_image_log(f"Segmind SDXL 1.0 성공! 크기: {img.size[0]}x{img.size[1]}", "success")
+            return img
+        else:
+            add_image_log(f"Segmind 실패: HTTP {response.status_code}", "error")
     except Exception as e:
-        print(f"Segmind Error: {e}")
+        add_image_log(f"Segmind 예외: {str(e)[:80]}", "error")
     return None
 
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    """이미지 생성 시도 및 폴백 로직"""
+    """이미지 생성 시도 및 폴백 로직
+    Returns: (img, actual_provider_info) - actual_provider_info에 실제 사용된 모델명 포함
+    """
     enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
+    add_image_log(f"이미지 생성 시작 | 선택 엔진: {provider} | 크기: {width}x{height}", "info")
 
     # 1. Nano Banana (Gemini Image) 우선 시도
     if "Nano Banana" in provider:
+        add_image_log("1단계: Nano Banana (Gemini Image) 시도", "info")
         if 'gemini_key' in globals() and gemini_key:
-            img = generate_image_nanobanana(enhanced, width, height, gemini_key)
+            img, actual_model = generate_image_nanobanana(enhanced, width, height, gemini_key)
             if img:
-                return img, "Nano Banana 🍌"
+                return img, f"Nano Banana 🍌 ({actual_model})"
+            add_image_log("Nano Banana 실패 → Pollinations 폴백 진행", "warn")
             st.toast("⚠️ Nano Banana 실패, Pollinations로 폴백...")
+        else:
+            add_image_log("Nano Banana: Gemini API 키 미설정, 폴백 진행", "warn")
 
     # 2. Segmind 시도 (선택된 경우)
     if "Segmind" in provider:
+        add_image_log("1단계: Segmind (SDXL) 시도", "info")
         if 'segmind_key' in globals() and segmind_key:
             img = generate_image_segmind(enhanced, width, height, segmind_key)
             if img:
-                return img, "Segmind"
+                return img, "Segmind (SDXL 1.0)"
+            add_image_log("Segmind 실패 → Pollinations 폴백 진행", "warn")
             st.toast("⚠️ Segmind 실패, Pollinations로 폴백...")
+        else:
+            add_image_log("Segmind: API 키 미설정, 폴백 진행", "warn")
 
     # 3. Pollinations (기본 또는 폴백)
     if "Flux" in provider:
+        poll_model = "Flux"
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
     else: # Turbo or Fallback
+        poll_model = "Turbo"
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-    
+
+    is_fallback = "Nano Banana" in provider or "Segmind" in provider
+    if is_fallback:
+        add_image_log(f"폴백 → Pollinations {poll_model} 사용", "warn")
+    else:
+        add_image_log(f"Pollinations {poll_model} 모델 요청 중...", "model")
+
     for attempt in range(max_retries):
+        add_image_log(f"Pollinations {poll_model} 시도 [{attempt+1}/{max_retries}]", "info")
         try:
             response = requests.get(url, timeout=90)
             if response.status_code == 200 and len(response.content) > 1000:
                 img = Image.open(BytesIO(response.content))
                 if img.size[0] > 100:
-                    return img, provider
+                    actual_provider = f"Pollinations {poll_model}"
+                    if is_fallback:
+                        actual_provider += " (폴백)"
+                    add_image_log(f"Pollinations {poll_model} 성공! 크기: {img.size[0]}x{img.size[1]}", "success")
+                    return img, actual_provider
+            else:
+                add_image_log(f"Pollinations 응답 이상: HTTP {response.status_code}, 크기: {len(response.content)}B", "warn")
         except Exception as e:
-            pass
+            add_image_log(f"Pollinations 시도 {attempt+1} 실패: {str(e)[:60]}", "error")
         if attempt < max_retries - 1:
+            add_image_log(f"2초 후 재시도...", "info")
             time.sleep(2)
 
+    add_image_log("모든 이미지 생성 엔진 실패", "error")
     return None, None
 
 def get_preview_size(width, height):
@@ -2177,12 +2288,15 @@ def generate_all_preview_images(plan_data, img_width, img_height, provider, use_
             final_prompt = base_prompt
 
         # 프리뷰 이미지 생성
-        img, _ = try_generate_image_with_fallback(final_prompt, preview_w, preview_h, provider, max_retries)
+        img, actual_provider = try_generate_image_with_fallback(final_prompt, preview_w, preview_h, provider, max_retries)
 
         if img:
             if 'generated_images' not in st.session_state:
                 st.session_state['generated_images'] = {}
             st.session_state['generated_images'][scene_num] = img
+            if 'image_providers' not in st.session_state:
+                st.session_state['image_providers'] = {}
+            st.session_state['image_providers'][f"scene_{scene_num}"] = actual_provider
             generated_count += 1
 
         progress_bar.progress((idx + 1) / total_scenes)
@@ -2485,17 +2599,20 @@ if st.session_state.get('plan_data'):
                                     if detailed:
                                         final_prompt = f"{detailed}, {final_prompt}"
                                 
-                                img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
-                                
+                                img, actual_provider = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+
                                 if img:
                                     if 'turntable_images' not in st.session_state:
                                         st.session_state['turntable_images'] = {}
                                     st.session_state['turntable_images'][tt_key] = img
-                                
+                                    if 'image_providers' not in st.session_state:
+                                        st.session_state['image_providers'] = {}
+                                    st.session_state['image_providers'][f"tt_{tt_key}"] = actual_provider
+
                                 current += 1
                                 progress.progress(current / total_views)
                                 time.sleep(0.5)
-            
+
             status.markdown("<div class='status-box'>✅ 턴테이블 생성 완료!</div>", unsafe_allow_html=True)
             st.rerun()
         
@@ -2523,6 +2640,9 @@ if st.session_state.get('plan_data'):
                                 
                                 if tt_key in st.session_state.get('turntable_images', {}):
                                     st.image(st.session_state['turntable_images'][tt_key], use_container_width=True)
+                                    tt_provider_key = f"tt_{tt_key}"
+                                    if tt_provider_key in st.session_state.get('image_providers', {}):
+                                        st.caption(f"🤖 {st.session_state['image_providers'][tt_provider_key]}")
                                 else:
                                     if st.button(f"📸", key=f"g_{tt_key}"):
                                         final_prompt = view.get('prompt', '')
@@ -2532,11 +2652,14 @@ if st.session_state.get('plan_data'):
                                                 final_prompt = f"{detailed}, {final_prompt}"
                                         
                                         with st.spinner("생성 중..."):
-                                            img, _ = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
+                                            img, actual_provider = try_generate_image_with_fallback(final_prompt, 1024, 1024, image_provider, max_retries)
                                         if img:
                                             if 'turntable_images' not in st.session_state:
                                                 st.session_state['turntable_images'] = {}
                                             st.session_state['turntable_images'][tt_key] = img
+                                            if 'image_providers' not in st.session_state:
+                                                st.session_state['image_providers'] = {}
+                                            st.session_state['image_providers'][f"tt_{tt_key}"] = actual_provider
                                             st.rerun()
                                 
                                 with st.expander("프롬프트"):
@@ -2566,13 +2689,16 @@ if st.session_state.get('plan_data'):
                 else:
                     final = base
                 
-                img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
-                
+                img, actual_provider = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+
                 if img:
                     if 'generated_images' not in st.session_state:
                         st.session_state['generated_images'] = {}
                     st.session_state['generated_images'][scene_num] = img
-                
+                    if 'image_providers' not in st.session_state:
+                        st.session_state['image_providers'] = {}
+                    st.session_state['image_providers'][f"scene_{scene_num}"] = actual_provider
+
                 progress.progress((idx + 1) / len(scenes))
                 time.sleep(0.5)
             
@@ -2602,6 +2728,9 @@ if st.session_state.get('plan_data'):
             # 이미지 표시 또는 생성 버튼
             if scene_num in st.session_state.get('generated_images', {}):
                 st.image(st.session_state['generated_images'][scene_num], use_container_width=True)
+                provider_key = f"scene_{scene_num}"
+                if provider_key in st.session_state.get('image_providers', {}):
+                    st.caption(f"🤖 생성 모델: {st.session_state['image_providers'][provider_key]}")
             else:
                 if st.button(f"📸 이미지 생성", key=f"g_s_{scene_num}"):
                     base = scene.get('image_prompt', '')
@@ -2611,11 +2740,14 @@ if st.session_state.get('plan_data'):
                         final = base
                     
                     with st.spinner("생성 중..."):
-                        img, _ = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
+                        img, actual_provider = try_generate_image_with_fallback(final, img_width, img_height, image_provider, max_retries)
                     if img:
                         if 'generated_images' not in st.session_state:
                             st.session_state['generated_images'] = {}
                         st.session_state['generated_images'][scene_num] = img
+                        if 'image_providers' not in st.session_state:
+                            st.session_state['image_providers'] = {}
+                        st.session_state['image_providers'][f"scene_{scene_num}"] = actual_provider
                         st.rerun()
             
             # 씬 정보

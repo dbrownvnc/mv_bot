@@ -822,11 +822,14 @@ with st.sidebar:
     auto_generate = st.checkbox("자동 이미지 생성", value=False)
     infinite_retry = st.checkbox("무한 재시도", value=False)
     
-    # 이미지 공급자 선택 (Nano Banana 제거 및 Segmind 기본)
+    # [수정됨] 이미지 공급자 선택 (세분화된 무료 모델 추가)
     image_provider = st.selectbox("엔진", [
-        "Segmind (SDXL)",
-        "Pollinations Flux",
-        "Pollinations Turbo ⚡"
+        "Pollinations Flux-Realism 📸",   # [추천] 극실사/영화용 (최고 퀄리티)
+        "Pollinations Flux-Anime 🎨",     # 애니메이션/일러스트용
+        "Pollinations Flux-3D 🧊",        # 3D 렌더링/픽사 스타일
+        "Pollinations Dark 🌑",           # 어둡고 분위기 있는 스타일
+        "Pollinations Turbo ⚡",          # 속도 최우선 (퀄리티 낮음)
+        "Segmind (SDXL)"                  # 키 필요
     ], index=0)
     
     if not infinite_retry:
@@ -2081,13 +2084,18 @@ def generate_image_segmind(prompt, width, height, api_key):
     return None
 
 def try_generate_image_with_fallback(prompt, width, height, provider, max_retries=3):
-    """이미지 생성 시도 및 폴백 로직
-    Returns: (img, actual_provider_info) - actual_provider_info에 실제 사용된 모델명 포함
-    """
-    enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
+    """이미지 생성 시도 및 폴백 로직 (Pollinations 모델 세분화 적용)"""
+    
+    # 프롬프트 보정 (퀄리티 향상)
+    enhanced = f"{prompt}, highly detailed, 8k resolution, cinematic lighting"
+    if "Anime" in provider:
+        enhanced += ", anime style, studio ghibli, makoto shinkai"
+    elif "Realism" in provider:
+        enhanced += ", photorealistic, raw photo, dslr, soft lighting"
+        
     add_image_log(f"이미지 생성 시작 | 선택 엔진: {provider} | 크기: {width}x{height}", "info")
 
-    # 1. Segmind 시도 (선택된 경우)
+    # 1. Segmind 시도
     if "Segmind" in provider:
         add_image_log("1단계: Segmind (SDXL) 시도", "info")
         sg_api_key = globals().get('segmind_key') or get_api_key("SEGMIND_API_KEY")
@@ -2096,46 +2104,59 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
             if img:
                 return img, "Segmind (SDXL 1.0)"
             add_image_log("Segmind 실패 → Pollinations 폴백 진행", "warn")
-            st.toast("⚠️ Segmind 실패, Pollinations로 폴백...")
         else:
-            add_image_log("Segmind: API 키 미설정 (SEGMIND_API_KEY), 폴백 진행", "warn")
+            add_image_log("Segmind API 키 없음 → Pollinations 자동 전환", "warn")
 
-    # 2. Pollinations (기본 또는 폴백)
-    if "Flux" in provider:
-        poll_model = "Flux"
-        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
-    else: # Turbo or Fallback
-        poll_model = "Turbo"
-        url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
-
-    # Segmind 선택시 실패한 경우 폴백 표시
-    is_fallback = "Segmind" in provider
-    if is_fallback:
-        add_image_log(f"폴백 → Pollinations {poll_model} 사용", "warn")
+    # 2. Pollinations 모델 매핑 (핵심 수정 부분)
+    # provider 이름에 따라 최적 모델 파라미터 설정
+    seed = random.randint(0, 999999)
+    base_url = "https://image.pollinations.ai/prompt/"
+    encoded_prompt = urllib.parse.quote(enhanced)
+    
+    # 모델별 URL 파라미터 설정
+    if "Realism" in provider:
+        poll_model = "flux-realism" # 실사 전용
+    elif "Anime" in provider:
+        poll_model = "flux-anime"   # 애니 전용
+    elif "3D" in provider:
+        poll_model = "flux-3d"      # 3D 전용
+    elif "Dark" in provider:
+        poll_model = "any-dark"     # 다크 판타지 전용
+    elif "Turbo" in provider:
+        poll_model = "turbo"        # 속도 전용
     else:
-        add_image_log(f"Pollinations {poll_model} 모델 요청 중...", "model")
+        poll_model = "flux"         # 기본
+        
+    url = f"{base_url}{encoded_prompt}?width={width}&height={height}&model={poll_model}&nologo=true&seed={seed}&enhance=true"
 
+    is_fallback = "Segmind" in provider
+    log_prefix = "폴백 → " if is_fallback else ""
+    add_image_log(f"{log_prefix}Pollinations [{poll_model}] 모델 요청", "model")
+
+    # 재시도 로직
     for attempt in range(max_retries):
-        add_image_log(f"Pollinations {poll_model} 시도 [{attempt+1}/{max_retries}]", "info")
         try:
-            response = requests.get(url, timeout=90)
+            # 타임아웃을 넉넉히 설정 (고화질 모델은 시간 걸림)
+            response = requests.get(url, timeout=60)
+            
             if response.status_code == 200 and len(response.content) > 1000:
                 img = Image.open(BytesIO(response.content))
                 if img.size[0] > 100:
                     actual_provider = f"Pollinations {poll_model}"
                     if is_fallback:
                         actual_provider += " (폴백)"
-                    add_image_log(f"Pollinations {poll_model} 성공! 크기: {img.size[0]}x{img.size[1]}", "success")
+                    add_image_log(f"생성 성공! ({poll_model})", "success")
                     return img, actual_provider
             else:
-                add_image_log(f"Pollinations 응답 이상: HTTP {response.status_code}, 크기: {len(response.content)}B", "warn")
+                add_image_log(f"응답 오류 ({attempt+1}/{max_retries}): {response.status_code}", "warn")
+                
         except Exception as e:
-            add_image_log(f"Pollinations 시도 {attempt+1} 실패: {str(e)[:60]}", "error")
+            add_image_log(f"생성 실패 ({attempt+1}/{max_retries}): {str(e)[:30]}", "error")
+            
         if attempt < max_retries - 1:
-            add_image_log(f"2초 후 재시도...", "info")
-            time.sleep(2)
+            time.sleep(1.5)
 
-    add_image_log("모든 이미지 생성 엔진 실패", "error")
+    add_image_log("모든 이미지 생성 시도 실패", "error")
     return None, None
 
 def get_preview_size(width, height):

@@ -1984,6 +1984,10 @@ def create_html_export(plan_data):
 def generate_image_nanobanana(prompt, width, height, api_key):
     """Nano Banana (Gemini Image) API를 사용한 이미지 생성
     https://ai.google.dev/gemini-api/docs/image-generation
+
+    지원 모델 (2026년 기준):
+    - gemini-2.0-flash-exp-image-generation: 이미지 생성 전용 (2026년 3월까지)
+    - gemini-3-pro-image-preview: Nano Banana Pro (유료 티어 필요)
     """
     if not api_key:
         return None
@@ -1996,17 +2000,18 @@ def generate_image_nanobanana(prompt, width, height, api_key):
 
         client = genai.Client(api_key=api_key)
 
-        # 여러 모델 시도 (최신순)
+        # 최신 모델 순서로 시도
         models_to_try = [
-            "gemini-2.0-flash-exp",
-            "gemini-2.0-flash-preview-image-generation",
+            "gemini-2.0-flash-exp-image-generation",  # 이미지 생성 전용 모델
+            "gemini-2.0-flash-exp",                    # 실험적 모델 (이미지 지원)
+            "gemini-3-pro-image-preview",              # Nano Banana Pro (유료)
         ]
 
         for model_name in models_to_try:
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=f"Generate a high-quality, cinematic image with no text: {prompt}",
+                    contents=f"Generate a high-quality, cinematic image with no text or watermarks. Style: professional film still. Subject: {prompt}",
                     config=types.GenerateContentConfig(
                         response_modalities=['Image', 'Text']
                     )
@@ -2027,7 +2032,16 @@ def generate_image_nanobanana(prompt, width, height, api_key):
                     last_error = f"{model_name}: 응답 없음"
 
             except Exception as model_err:
-                last_error = f"{model_name}: {str(model_err)[:80]}"
+                err_str = str(model_err)
+                # 에러 유형별 처리
+                if "429" in err_str or "quota" in err_str.lower():
+                    last_error = f"{model_name}: API 할당량 초과 (유료 플랜 필요)"
+                elif "403" in err_str or "permission" in err_str.lower():
+                    last_error = f"{model_name}: API 권한 없음 (결제 설정 필요)"
+                elif "404" in err_str:
+                    last_error = f"{model_name}: 모델 없음"
+                else:
+                    last_error = f"{model_name}: {err_str[:60]}"
                 continue  # 다음 모델 시도
 
         # 모든 모델 실패

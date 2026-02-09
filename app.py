@@ -852,9 +852,9 @@ with st.sidebar:
 
         logs = st.session_state.get('image_gen_logs', [])
         if logs:
-            # 최근 로그가 위에 오도록 역순 표시
+            # [수정] 로그를 시간순(위->아래)으로 표시
             log_html = ""
-            for log_entry in reversed(logs[-30:]):
+            for log_entry in logs[-30:]: # reversed 제거
                 level_class = f"img-log-{log_entry['level']}"
                 level_icon = {
                     'info': 'ℹ️', 'success': '✅', 'warn': '⚠️',
@@ -2045,13 +2045,11 @@ def create_html_export(plan_data):
 # ------------------------------------------------------------------
 def generate_image_nanobanana(prompt, width, height, api_key):
     """Nano Banana (Gemini Image) API를 사용한 이미지 생성
-    수정됨: 안정적인 모델명으로 업데이트 및 에러 처리 강화
+    수정됨: Imagen 3 모델 사용 및 에러 처리 강화
     """
     if not api_key:
         add_image_log("Nano Banana: API 키 없음", "error")
         return None, None
-
-    last_error = None
 
     try:
         from google import genai
@@ -2059,71 +2057,47 @@ def generate_image_nanobanana(prompt, width, height, api_key):
 
         client = genai.Client(api_key=api_key)
         
-        # 존재하지 않거나 과금 유도 모델 대신 안정적인 모델 순서로 변경
-        models_to_try = [
-            "gemini-2.0-flash",       # 현재 이미지 생성에 가장 안정적인 모델
-            "gemini-1.5-pro-latest",  # 1.5 Pro 최신 버전
-            "gemini-1.5-flash",       # 1.5 Flash
-        ]
+        # [수정] 텍스트 모델(gemini) 대신 이미지 전용 모델(imagen) 사용
+        # Imagen 3가 현재 Google AI Studio에서 사용 가능한 최신 이미지 모델입니다.
+        model_name = "imagen-3.0-generate-001" 
+        
+        add_image_log(f"Nano Banana: {model_name} 모델 호출 중...", "model")
 
-        # Gemini는 종횡비 제어가 제한적이므로 프롬프트에 크기 힌트 추가
+        # 비율 힌트 추가
         ratio_hint = "Wide aspect ratio" if width > height else "Tall aspect ratio" if height > width else "Square aspect ratio"
-        final_prompt = f"{prompt}. {ratio_hint}, high resolution, photorealistic, no text."
+        final_prompt = f"{prompt}. {ratio_hint}, photorealistic, 8k, highly detailed."
 
-        for idx, model_name in enumerate(models_to_try):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=final_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=['Image'], # 명시적으로 이미지 요청
-                        temperature=0.9
-                    )
-                )
+        # [수정] generate_content 대신 generate_images 사용 (Imagen 전용 메서드)
+        response = client.models.generate_images(
+            model=model_name,
+            prompt=final_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9" if width > height else "9:16" if height > width else "1:1"
+            )
+        )
 
-                # 이미지 추출
-                if response.candidates and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data is not None:
-                            image_bytes = part.inline_data.data
-                            img = Image.open(BytesIO(image_bytes))
-                            
-                            # 이미지 크기가 너무 작거나 깨진 경우 체크
-                            if img.size[0] > 0:
-                                add_image_log(f"이미지 생성 성공! 모델: {model_name}", "success")
-                                return img, model_name
-                        
-                        # 텍스트로 거절 사유가 온 경우
-                        elif hasattr(part, 'text') and part.text:
-                            # 안전 필터 등으로 인해 이미지가 거절된 경우
-                            error_msg = part.text[:100]
-                            add_image_log(f"{model_name} 거절: {error_msg}", "warn")
-                            last_error = error_msg
-                else:
-                    last_error = "응답 데이터 없음"
+        # 이미지 추출 (Imagen 구조에 맞게 변경)
+        if response.generated_images:
+            image_bytes = response.generated_images[0].image.image_bytes
+            img = Image.open(BytesIO(image_bytes))
+            add_image_log(f"이미지 생성 성공! 모델: {model_name}", "success")
+            return img, model_name
+        else:
+            add_image_log(f"{model_name}: 이미지 데이터 반환되지 않음", "warn")
+            return None, None
 
-            except Exception as model_err:
-                err_str = str(model_err)
-                # 429 에러는 로그만 남기고 다음 모델로 빠르게 넘어감
-                if "429" in err_str:
-                    add_image_log(f"{model_name}: 할당량 초과(429) - 다음 모델 시도", "warn")
-                    last_error = "Quota Exceeded (429)"
-                elif "404" in err_str:
-                    add_image_log(f"{model_name}: 모델 찾을 수 없음(404)", "warn")
-                else:
-                    add_image_log(f"{model_name} 오류: {err_str[:60]}", "error")
-                    last_error = err_str[:60]
-                continue  # 다음 모델 시도
-
-        # 모든 모델 실패 시 (폴백 유도를 위해 None 반환)
-        return None, None
-
-    except ImportError:
-        add_image_log("google-genai 패키지 미설치", "error")
-        st.toast("⚠️ pip install google-genai 필요")
-        return None, None
     except Exception as e:
-        add_image_log(f"Nano Banana 치명적 오류: {str(e)[:80]}", "error")
+        err_str = str(e)
+        if "404" in err_str:
+            add_image_log(f"{model_name}: 모델을 찾을 수 없거나 권한 없음 (404)", "warn")
+        elif "429" in err_str:
+            add_image_log(f"{model_name}: 할당량 초과 (429)", "warn")
+        elif "400" in err_str:
+            add_image_log(f"{model_name}: 요청 형식 오류 (400) - {err_str[:50]}", "warn")
+        else:
+            add_image_log(f"Nano Banana 오류: {err_str[:60]}", "error")
+        
         return None, None
 
 def generate_image_segmind(prompt, width, height, api_key):

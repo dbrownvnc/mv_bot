@@ -822,13 +822,12 @@ with st.sidebar:
     auto_generate = st.checkbox("자동 이미지 생성", value=False)
     infinite_retry = st.checkbox("무한 재시도", value=False)
     
-    # 이미지 공급자 선택
+    # 이미지 공급자 선택 (Nano Banana 제거 및 Segmind 기본)
     image_provider = st.selectbox("엔진", [
-        "Nano Banana 🍌 (Gemini)",
         "Segmind (SDXL)",
         "Pollinations Flux",
         "Pollinations Turbo ⚡"
-    ], index=0, help="Nano Banana = Gemini Image API")
+    ], index=0)
     
     if not infinite_retry:
         max_retries = st.slider("재시도", 1, 10, 3)
@@ -852,9 +851,9 @@ with st.sidebar:
 
         logs = st.session_state.get('image_gen_logs', [])
         if logs:
-            # [수정] 로그를 시간순(위->아래)으로 표시
+            # 로그를 시간순(위->아래)으로 표시
             log_html = ""
-            for log_entry in logs[-30:]: # reversed 제거
+            for log_entry in logs[-30:]:
                 level_class = f"img-log-{log_entry['level']}"
                 level_icon = {
                     'info': 'ℹ️', 'success': '✅', 'warn': '⚠️',
@@ -2041,65 +2040,8 @@ def create_html_export(plan_data):
     return html
 
 # ------------------------------------------------------------------
-# 이미지 생성 (Segmind, Nano Banana 추가)
+# 이미지 생성 (Segmind 추가)
 # ------------------------------------------------------------------
-def generate_image_nanobanana(prompt, width, height, api_key):
-    """Nano Banana (Gemini Image) API를 사용한 이미지 생성
-    수정됨: Imagen 3 모델 사용 및 에러 처리 강화
-    """
-    if not api_key:
-        add_image_log("Nano Banana: API 키 없음", "error")
-        return None, None
-
-    try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=api_key)
-        
-        # [수정] 텍스트 모델(gemini) 대신 이미지 전용 모델(imagen) 사용
-        # Imagen 3가 현재 Google AI Studio에서 사용 가능한 최신 이미지 모델입니다.
-        model_name = "imagen-3.0-generate-001" 
-        
-        add_image_log(f"Nano Banana: {model_name} 모델 호출 중...", "model")
-
-        # 비율 힌트 추가
-        ratio_hint = "Wide aspect ratio" if width > height else "Tall aspect ratio" if height > width else "Square aspect ratio"
-        final_prompt = f"{prompt}. {ratio_hint}, photorealistic, 8k, highly detailed."
-
-        # [수정] generate_content 대신 generate_images 사용 (Imagen 전용 메서드)
-        response = client.models.generate_images(
-            model=model_name,
-            prompt=final_prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="16:9" if width > height else "9:16" if height > width else "1:1"
-            )
-        )
-
-        # 이미지 추출 (Imagen 구조에 맞게 변경)
-        if response.generated_images:
-            image_bytes = response.generated_images[0].image.image_bytes
-            img = Image.open(BytesIO(image_bytes))
-            add_image_log(f"이미지 생성 성공! 모델: {model_name}", "success")
-            return img, model_name
-        else:
-            add_image_log(f"{model_name}: 이미지 데이터 반환되지 않음", "warn")
-            return None, None
-
-    except Exception as e:
-        err_str = str(e)
-        if "404" in err_str:
-            add_image_log(f"{model_name}: 모델을 찾을 수 없거나 권한 없음 (404)", "warn")
-        elif "429" in err_str:
-            add_image_log(f"{model_name}: 할당량 초과 (429)", "warn")
-        elif "400" in err_str:
-            add_image_log(f"{model_name}: 요청 형식 오류 (400) - {err_str[:50]}", "warn")
-        else:
-            add_image_log(f"Nano Banana 오류: {err_str[:60]}", "error")
-        
-        return None, None
-
 def generate_image_segmind(prompt, width, height, api_key):
     """Segmind API를 사용한 이미지 생성"""
     if not api_key:
@@ -2145,24 +2087,7 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
     enhanced = f"{prompt}, masterpiece, best quality, highly detailed"
     add_image_log(f"이미지 생성 시작 | 선택 엔진: {provider} | 크기: {width}x{height}", "info")
 
-    # 1. Nano Banana (Gemini Image) 우선 시도
-    if "Nano Banana" in provider:
-        add_image_log("1단계: Nano Banana (Gemini Image) 시도", "info")
-        # globals의 gemini_key 또는 Secrets/환경변수에서 직접 가져오기
-        nb_api_key = (globals().get('gemini_key') or
-                      get_api_key("GOOGLE_API_KEY") or
-                      get_api_key("GEMINI_API_KEY"))
-        if nb_api_key:
-            add_image_log(f"API 키 확인됨 (소스: {'globals' if globals().get('gemini_key') else 'Secrets/환경변수'})", "info")
-            img, actual_model = generate_image_nanobanana(enhanced, width, height, nb_api_key)
-            if img:
-                return img, f"Nano Banana 🍌 ({actual_model})"
-            add_image_log("Nano Banana 실패 → Pollinations 폴백 진행", "warn")
-            st.toast("⚠️ Nano Banana 실패, Pollinations로 폴백...")
-        else:
-            add_image_log("Nano Banana: Gemini API 키 미설정 (Secrets에 GEMINI_API_KEY 또는 GOOGLE_API_KEY 설정 필요)", "warn")
-
-    # 2. Segmind 시도 (선택된 경우)
+    # 1. Segmind 시도 (선택된 경우)
     if "Segmind" in provider:
         add_image_log("1단계: Segmind (SDXL) 시도", "info")
         sg_api_key = globals().get('segmind_key') or get_api_key("SEGMIND_API_KEY")
@@ -2173,9 +2098,9 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
             add_image_log("Segmind 실패 → Pollinations 폴백 진행", "warn")
             st.toast("⚠️ Segmind 실패, Pollinations로 폴백...")
         else:
-            add_image_log("Segmind: API 키 미설정, 폴백 진행", "warn")
+            add_image_log("Segmind: API 키 미설정 (SEGMIND_API_KEY), 폴백 진행", "warn")
 
-    # 3. Pollinations (기본 또는 폴백)
+    # 2. Pollinations (기본 또는 폴백)
     if "Flux" in provider:
         poll_model = "Flux"
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&model=flux&nologo=true&seed={random.randint(0,999999)}"
@@ -2183,7 +2108,8 @@ def try_generate_image_with_fallback(prompt, width, height, provider, max_retrie
         poll_model = "Turbo"
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(enhanced)}?width={width}&height={height}&nologo=true&seed={random.randint(0,999999)}"
 
-    is_fallback = "Nano Banana" in provider or "Segmind" in provider
+    # Segmind 선택시 실패한 경우 폴백 표시
+    is_fallback = "Segmind" in provider
     if is_fallback:
         add_image_log(f"폴백 → Pollinations {poll_model} 사용", "warn")
     else:

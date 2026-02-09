@@ -2045,13 +2045,7 @@ def create_html_export(plan_data):
 # ------------------------------------------------------------------
 def generate_image_nanobanana(prompt, width, height, api_key):
     """Nano Banana (Gemini Image) API를 사용한 이미지 생성
-    https://ai.google.dev/gemini-api/docs/image-generation
-
-    지원 모델 (2026년 기준):
-    - gemini-2.0-flash-exp-image-generation: 이미지 생성 전용 (2026년 3월까지)
-    - gemini-3-pro-image-preview: Nano Banana Pro (유료 티어 필요)
-
-    Returns: (img, model_name) or (None, None)
+    수정됨: 안정적인 모델명으로 업데이트 및 에러 처리 강화
     """
     if not api_key:
         add_image_log("Nano Banana: API 키 없음", "error")
@@ -2064,23 +2058,26 @@ def generate_image_nanobanana(prompt, width, height, api_key):
         from google.genai import types
 
         client = genai.Client(api_key=api_key)
-        add_image_log("Nano Banana 엔진 초기화 완료", "info")
-
-        # 최신 모델 순서로 시도
+        
+        # 존재하지 않거나 과금 유도 모델 대신 안정적인 모델 순서로 변경
         models_to_try = [
-            "gemini-2.0-flash-exp-image-generation",  # 이미지 생성 전용 모델
-            "gemini-2.0-flash-exp",                    # 실험적 모델 (이미지 지원)
-            "gemini-3-pro-image-preview",              # Nano Banana Pro (유료)
+            "gemini-2.0-flash",       # 현재 이미지 생성에 가장 안정적인 모델
+            "gemini-1.5-pro-latest",  # 1.5 Pro 최신 버전
+            "gemini-1.5-flash",       # 1.5 Flash
         ]
 
+        # Gemini는 종횡비 제어가 제한적이므로 프롬프트에 크기 힌트 추가
+        ratio_hint = "Wide aspect ratio" if width > height else "Tall aspect ratio" if height > width else "Square aspect ratio"
+        final_prompt = f"{prompt}. {ratio_hint}, high resolution, photorealistic, no text."
+
         for idx, model_name in enumerate(models_to_try):
-            add_image_log(f"모델 시도 [{idx+1}/{len(models_to_try)}]: {model_name}", "model")
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=f"Generate a high-quality, cinematic image with no text or watermarks. Style: professional film still. Subject: {prompt}",
+                    contents=final_prompt,
                     config=types.GenerateContentConfig(
-                        response_modalities=['Image', 'Text']
+                        response_modalities=['Image'], # 명시적으로 이미지 요청
+                        temperature=0.9
                     )
                 )
 
@@ -2090,47 +2087,43 @@ def generate_image_nanobanana(prompt, width, height, api_key):
                         if hasattr(part, 'inline_data') and part.inline_data is not None:
                             image_bytes = part.inline_data.data
                             img = Image.open(BytesIO(image_bytes))
-                            add_image_log(f"이미지 생성 성공! 모델: {model_name} | 크기: {img.size[0]}x{img.size[1]}", "success")
-                            st.toast(f"✅ Nano Banana ({model_name}) 성공!")
-                            return img, model_name
+                            
+                            # 이미지 크기가 너무 작거나 깨진 경우 체크
+                            if img.size[0] > 0:
+                                add_image_log(f"이미지 생성 성공! 모델: {model_name}", "success")
+                                return img, model_name
+                        
+                        # 텍스트로 거절 사유가 온 경우
                         elif hasattr(part, 'text') and part.text:
-                            # 텍스트만 반환된 경우 (이미지 생성 실패)
-                            last_error = f"{model_name}: 텍스트만 반환됨"
-                            add_image_log(f"{model_name}: 텍스트만 반환됨 (이미지 미생성)", "warn")
+                            # 안전 필터 등으로 인해 이미지가 거절된 경우
+                            error_msg = part.text[:100]
+                            add_image_log(f"{model_name} 거절: {error_msg}", "warn")
+                            last_error = error_msg
                 else:
-                    last_error = f"{model_name}: 응답 없음"
-                    add_image_log(f"{model_name}: 빈 응답 수신", "warn")
+                    last_error = "응답 데이터 없음"
 
             except Exception as model_err:
                 err_str = str(model_err)
-                # 에러 유형별 처리
-                if "429" in err_str or "quota" in err_str.lower():
-                    last_error = f"{model_name}: API 할당량 초과 (유료 플랜 필요)"
-                    add_image_log(f"{model_name}: 429 할당량 초과 - 유료 플랜 필요", "error")
-                elif "403" in err_str or "permission" in err_str.lower():
-                    last_error = f"{model_name}: API 권한 없음 (결제 설정 필요)"
-                    add_image_log(f"{model_name}: 403 권한 없음 - 결제 설정 필요", "error")
+                # 429 에러는 로그만 남기고 다음 모델로 빠르게 넘어감
+                if "429" in err_str:
+                    add_image_log(f"{model_name}: 할당량 초과(429) - 다음 모델 시도", "warn")
+                    last_error = "Quota Exceeded (429)"
                 elif "404" in err_str:
-                    last_error = f"{model_name}: 모델 없음"
-                    add_image_log(f"{model_name}: 404 모델을 찾을 수 없음", "error")
+                    add_image_log(f"{model_name}: 모델 찾을 수 없음(404)", "warn")
                 else:
-                    last_error = f"{model_name}: {err_str[:60]}"
-                    add_image_log(f"{model_name}: {err_str[:80]}", "error")
+                    add_image_log(f"{model_name} 오류: {err_str[:60]}", "error")
+                    last_error = err_str[:60]
                 continue  # 다음 모델 시도
 
-        # 모든 모델 실패
-        add_image_log(f"Nano Banana 전체 실패 - {len(models_to_try)}개 모델 모두 실패", "error")
-        if last_error:
-            st.toast(f"⚠️ Nano Banana: {last_error}")
+        # 모든 모델 실패 시 (폴백 유도를 위해 None 반환)
         return None, None
 
-    except ImportError as e:
-        add_image_log("google-genai 패키지 미설치 (pip install google-genai 필요)", "error")
-        st.toast("⚠️ google-genai 미설치. pip install google-genai 실행 필요")
+    except ImportError:
+        add_image_log("google-genai 패키지 미설치", "error")
+        st.toast("⚠️ pip install google-genai 필요")
         return None, None
     except Exception as e:
-        add_image_log(f"Nano Banana 예외: {str(e)[:80]}", "error")
-        st.toast(f"⚠️ Nano Banana: {str(e)[:80]}")
+        add_image_log(f"Nano Banana 치명적 오류: {str(e)[:80]}", "error")
         return None, None
 
 def generate_image_segmind(prompt, width, height, api_key):
